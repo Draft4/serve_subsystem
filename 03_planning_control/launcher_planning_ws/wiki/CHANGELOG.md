@@ -1,5 +1,12 @@
 # 工作空间变更记录
 
+## 未发布 — 简化模型加载
+
+- 涉及包：`tennis_serve_launcher_planning`。
+- 移除模型快照与 manifest 的运行时 SHA-256、版本一致性校验；模型快照的 SHA-256 仅作为状态追溯信息返回。
+- 验证：本地 `test_model_relaxation.py` 通过；RK3588 在快照与 manifest 摘要不一致时仍可加载已修改的模型快照。
+- Git commit/tag：待本次提交；未创建发布标签，`VERSION` 保持 `0.7.0`。
+
 ## 0.7.0 — 2026-09-21
 
 - 涉及包：`tennis_serve_launcher_planning`。

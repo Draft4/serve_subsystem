@@ -33,13 +33,9 @@ class ServePlannerNode(Node):
         self.declare_parameter(
             "model_path", str(model_dir / "model_snapshot.json")
         )
-        self.declare_parameter(
-            "manifest_path", str(model_dir / "manifest.json")
-        )
         self.timeout_s = float(self.get_parameter("localization_timeout_s").value)
         self.model = ModelService(
             str(self.get_parameter("model_path").value),
-            str(self.get_parameter("manifest_path").value),
             float(self.get_parameter("machine_boundary_tolerance_m").value),
         )
         self.robot = None

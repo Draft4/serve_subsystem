@@ -21,7 +21,6 @@ def _target(center_x_m):
 def _model():
     return ModelService(
         str(ROOT / "data" / "fire_ball" / "model_snapshot.json"),
-        str(ROOT / "data" / "fire_ball" / "manifest.json"),
         machine_boundary_tolerance_m=1.0,
     )
 

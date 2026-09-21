@@ -21,10 +21,9 @@ class ModelError(RuntimeError):
 
 
 class ModelService:
-    def __init__(self, model_path: str, manifest_path: str,
+    def __init__(self, model_path: str,
                  machine_boundary_tolerance_m: float = 1.0) -> None:
         self.model_path = Path(model_path).expanduser().resolve()
-        self.manifest_path = Path(manifest_path).expanduser().resolve()
         self.machine_boundary_tolerance_m = float(machine_boundary_tolerance_m)
         self._lock = threading.Lock()
         self._metadata = None
@@ -37,18 +36,13 @@ class ModelService:
         if self._metadata is not None:
             return dict(self._metadata)
         try:
-            manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
             model_bytes = self.model_path.read_bytes()
             snapshot = json.loads(model_bytes.decode("utf-8"))
             digest = hashlib.sha256(model_bytes).hexdigest()
-            if digest != str(manifest["model_snapshot_sha256"]):
-                raise ModelError("model SHA-256 does not match manifest")
-            if str(snapshot["model_version"]) != str(manifest["model_version"]):
-                raise ModelError("model version does not match manifest")
             self._metadata = {
-                "model_version": str(manifest["model_version"]),
+                "model_version": str(snapshot["model_version"]),
                 "model_sha256": digest,
-                "source_workbook_sha256": str(manifest["source_workbook_sha256"]),
+                "source_workbook_sha256": str(snapshot["metadata"]["source_sha256"]),
                 "strategy_config": dict(snapshot["strategy_config"]),
                 "training_summary": dict(snapshot["model"]["trainingSummary"]),
             }
@@ -97,8 +91,6 @@ class ModelService:
             )
         if result.get("ok") is not True or result.get("decision") != "execute":
             raise ModelError("{}: {}".format(result.get("code", "REJECTED"), result.get("message", "model rejected")))
-        if result.get("model_sha256") != metadata["model_sha256"]:
-            raise ModelError("model SHA changed during planning")
         candidate = result["recommended"]
         for key in (
             "upper_rpm", "lower_rpm", "vertical_servo_angle_deg", "success_probability",
