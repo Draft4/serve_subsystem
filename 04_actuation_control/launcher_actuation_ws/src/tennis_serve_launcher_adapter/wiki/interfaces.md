@@ -1,13 +1,13 @@
 # 输入输出接口
 
-消费 `/tennis/launcher/setpoint`、`feed_command` 与 `/launcher/*/state`；发布 `/tennis/launcher/state` 与 `/launcher/*/command`。
+消费 `/tennis/launcher/setpoint`、`feed_command`、轮速与拨球状态；发布 `/tennis/launcher/state` 与 `/launcher/*/command`。
 
 | 接口名 | 类型 | 生产/消费方 | 单位、坐标、时间与超时约定 |
 | --- | --- | --- | --- |
 | `/tennis/launcher/setpoint`、`feed_command` | `LauncherSetpoint`/`FeedCommand` | supervisor → adapter | RPM、deg；有效期与本地单调时钟双重超时 |
 | `/launcher/wheels/command`、`pitch/command`、`feeder/command` | `tennisbot_launcher` 消息 | adapter → 既有硬件节点 | 轮速 rpm、俯仰 deg；命令默认 10 Hz |
-| `/launcher/wheels/state`、`pitch/state`、`feeder/state` | `tennisbot_launcher` 消息 | 既有硬件节点 → adapter | 原始状态、硬件在线与拨球完成计数 |
-| `/tennis/launcher/state` | `LauncherState` | adapter → supervisor/mission/operator | 默认 25 Hz；反馈有效性含真实俯仰和轮速方向 |
+| `/launcher/wheels/state`、`feeder/state` | `tennisbot_launcher` 消息 | 既有硬件节点 → adapter | 原始轮速状态、硬件在线与拨球完成计数 |
+| `/tennis/launcher/state` | `LauncherState` | adapter → supervisor/mission/operator | 默认 25 Hz；轮速为实际反馈，俯仰角为命令估算值 |
 
 ROS 接口若未单列 QoS，则使用对应节点源码中的 `create_*` 配置；
 消息头时间戳和 `valid_until` 以接口字段为准。跨包接口字段的权威定义位于

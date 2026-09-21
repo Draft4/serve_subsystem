@@ -282,7 +282,7 @@ class ServeBridgeNode(Node):
         launcher_online = bool(
             launcher and launcher.online and launcher_age is not None and launcher_age <= self.launcher_timeout_s)
         launcher_ready = bool(
-            launcher_online and launcher.rpm_valid and launcher.pitch_valid)
+            launcher_online and launcher.rpm_valid)
         model_ready = bool(model and model.ready)
         return {
             "ok": True, "service_version": SERVICE_VERSION, "mode": "training",

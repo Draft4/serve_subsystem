@@ -15,7 +15,6 @@ from tennisbot_launcher.msg import (
     LauncherFeederCommand,
     LauncherFeederState,
     LauncherPitchCommand,
-    LauncherPitchState,
     LauncherWheelCommand,
     LauncherWheelState,
 )
@@ -42,7 +41,6 @@ class ServeLauncherAdapterNode(Node):
             "wheel_command_topic": "/launcher/wheels/command",
             "wheel_state_topic": "/launcher/wheels/state",
             "pitch_command_topic": "/launcher/pitch/command",
-            "pitch_state_topic": "/launcher/pitch/state",
             "feeder_command_topic": "/launcher/feeder/command",
             "feeder_state_topic": "/launcher/feeder/state",
             "upper_motor": 1,
@@ -54,9 +52,6 @@ class ServeLauncherAdapterNode(Node):
             "wheel_command_timeout_ms": 1000,
             "setpoint_receive_timeout_s": 1.2,
             "pitch_move_time_ms": 1000,
-            "pitch_settle_margin_s": 0.2,
-            "allow_open_loop_pitch": False,
-            "pitch_actual_field": "",
             "enforce_feedback_direction": True,
             "direction_check_min_rpm": 100.0,
             "hardware_state_timeout_s": 1.0,
@@ -78,12 +73,6 @@ class ServeLauncherAdapterNode(Node):
         self.setpoint_receive_timeout_s = float(
             self.get_parameter("setpoint_receive_timeout_s").value)
         self.pitch_move_ms = int(self.get_parameter("pitch_move_time_ms").value)
-        self.pitch_margin_s = float(
-            self.get_parameter("pitch_settle_margin_s").value)
-        self.allow_open_loop_pitch = bool(
-            self.get_parameter("allow_open_loop_pitch").value)
-        self.pitch_actual_field = str(
-            self.get_parameter("pitch_actual_field").value).strip()
         self.enforce_feedback_direction = bool(
             self.get_parameter("enforce_feedback_direction").value)
         self.direction_check_min_rpm = float(
@@ -100,16 +89,8 @@ class ServeLauncherAdapterNode(Node):
         if self.direction_check_min_rpm < 0.0:
             raise ValueError("direction_check_min_rpm must be non-negative")
         self._validate_hardware_interfaces()
-        self._resolved_pitch_actual_field = self._resolve_pitch_actual_field()
-        if self._resolved_pitch_actual_field:
-            self.get_logger().info(
-                f"using real pitch feedback field: {self._resolved_pitch_actual_field}")
-        elif self.allow_open_loop_pitch:
-            self.get_logger().warning(
-                "no real pitch feedback field; OPEN-LOOP pitch is explicitly enabled")
-        else:
-            self.get_logger().error(
-                "no real pitch feedback field; pitch_valid will remain false")
+        self.get_logger().info(
+            "pitch feedback is disabled; using commanded pitch without a feedback gate")
 
         self.wheel_pub = self.create_publisher(
             LauncherWheelCommand,
@@ -137,10 +118,6 @@ class ServeLauncherAdapterNode(Node):
             str(self.get_parameter("wheel_state_topic").value),
             self._wheel_callback, qos_profile_sensor_data)
         self.create_subscription(
-            LauncherPitchState,
-            str(self.get_parameter("pitch_state_topic").value),
-            self._pitch_callback, qos_profile_sensor_data)
-        self.create_subscription(
             LauncherFeederState,
             str(self.get_parameter("feeder_state_topic").value),
             self._feeder_callback, qos_profile_sensor_data)
@@ -150,12 +127,9 @@ class ServeLauncherAdapterNode(Node):
         self.setpoint_monotonic_deadline_s = 0.0
         self.last_target_key = None
         self.pitch_target_deg = 0.0
-        self.pitch_ready_after_s = 0.0
         self.wheel_state = None
-        self.pitch_state = None
         self.feeder_state = None
         self.wheel_received_s = 0.0
-        self.pitch_received_s = 0.0
         self.feeder_received_s = 0.0
         self.sequence = 0
         self.stop_sent = True
@@ -194,36 +168,12 @@ class ServeLauncherAdapterNode(Node):
         self._require_fields(
             LauncherPitchCommand,
             {"header", "position_degrees", "move_time_ms"})
-        self._require_fields(LauncherPitchState, {"valid", "error"})
         self._require_fields(LauncherFeederCommand, {"header", "command"})
         self._require_fields(
             LauncherFeederState,
             {"valid", "completed_count", "state", "result", "error"})
         if not hasattr(LauncherFeederCommand, "FEED"):
             raise RuntimeError("LauncherFeederCommand is incompatible; FEED is missing")
-
-    def _actual_pitch_degrees(self):
-        if self.pitch_state is None:
-            return None
-        if self._resolved_pitch_actual_field:
-            value = float(getattr(
-                self.pitch_state, self._resolved_pitch_actual_field))
-            if math.isfinite(value):
-                return value
-        return None
-
-    def _resolve_pitch_actual_field(self) -> str:
-        available = set(LauncherPitchState.get_fields_and_field_types())
-        if self.pitch_actual_field:
-            if self.pitch_actual_field not in available:
-                raise RuntimeError(
-                    "configured pitch_actual_field is missing from LauncherPitchState: "
-                    + self.pitch_actual_field)
-            return self.pitch_actual_field
-        for field in ("actual_degrees", "measured_degrees", "feedback_degrees"):
-            if field in available:
-                return field
-        return ""
 
     def _setpoint_callback(self, message: LauncherSetpoint) -> None:
         if message.interface_version != INTERFACE_VERSION:
@@ -259,9 +209,6 @@ class ServeLauncherAdapterNode(Node):
             pitch.move_time_ms = self.pitch_move_ms
             self.pitch_pub.publish(pitch)
             self.pitch_target_deg = float(message.pitch_target_deg)
-            self.pitch_ready_after_s = (
-                time.monotonic() + self.pitch_move_ms / 1000.0
-                + self.pitch_margin_s)
         self.last_target_key = key
 
     def _reject_feed(self, message: FeedCommand, detail: str, now_s: float) -> None:
@@ -314,10 +261,6 @@ class ServeLauncherAdapterNode(Node):
         self.wheel_state = message
         self.wheel_received_s = time.monotonic()
 
-    def _pitch_callback(self, message: LauncherPitchState) -> None:
-        self.pitch_state = message
-        self.pitch_received_s = time.monotonic()
-
     def _feeder_callback(self, message: LauncherFeederState) -> None:
         self.feeder_state = message
         self.feeder_received_s = time.monotonic()
@@ -364,9 +307,6 @@ class ServeLauncherAdapterNode(Node):
         wheel_fresh = (
             self.wheel_state is not None
             and now - self.wheel_received_s <= self.state_timeout_s)
-        pitch_fresh = (
-            self.pitch_state is not None
-            and now - self.pitch_received_s <= self.state_timeout_s)
         feeder_fresh = (
             self.feeder_state is not None
             and now - self.feeder_received_s <= self.state_timeout_s)
@@ -391,15 +331,7 @@ class ServeLauncherAdapterNode(Node):
                 motor1_target, motor2_target, self.direction_check_min_rpm)
             wheel_valid = wheel_valid and direction_valid
 
-        actual_pitch_deg = self._actual_pitch_degrees()
-        pitch_base_valid = bool(
-            pitch_fresh and self.pitch_state.valid and not self.pitch_state.error)
-        using_open_loop_pitch = bool(
-            pitch_base_valid and actual_pitch_deg is None
-            and self.allow_open_loop_pitch and now >= self.pitch_ready_after_s)
-        pitch_valid = bool(
-            pitch_base_valid
-            and (actual_pitch_deg is not None or using_open_loop_pitch))
+        using_commanded_pitch = self._setpoint_active()
         feeder_valid = bool(
             feeder_fresh and self.feeder_state.valid
             and self.feeder_state.state != FEEDER_FAULT_STATE
@@ -417,16 +349,13 @@ class ServeLauncherAdapterNode(Node):
         state.interface_version = INTERFACE_VERSION
         self.sequence += 1
         state.sequence = self.sequence
-        state.online = wheel_fresh and pitch_fresh
+        state.online = wheel_fresh
         state.rpm_valid = wheel_valid
-        state.pitch_valid = pitch_valid
+        state.pitch_valid = using_commanded_pitch
         state.upper_actual_rpm = upper_rpm
         state.lower_actual_rpm = lower_rpm
-        if actual_pitch_deg is not None and pitch_valid:
-            state.pitch_actual_deg = actual_pitch_deg
-        elif using_open_loop_pitch:
-            state.pitch_actual_deg = float(
-                getattr(self.pitch_state, "commanded_degrees", self.pitch_target_deg))
+        if using_commanded_pitch:
+            state.pitch_actual_deg = self.pitch_target_deg
         else:
             state.pitch_actual_deg = 0.0
         state.feed_feedback_supported = True
@@ -440,15 +369,8 @@ class ServeLauncherAdapterNode(Node):
             details.append(
                 "WHEEL_DIRECTION_MISMATCH"
                 if not direction_valid else "WHEEL_STATE_INVALID")
-        if not pitch_fresh:
-            details.append("PITCH_STATE_STALE")
-        elif not pitch_valid:
-            if pitch_base_valid and actual_pitch_deg is None:
-                details.append("PITCH_ACTUAL_FEEDBACK_UNAVAILABLE")
-            else:
-                details.append("PITCH_MOVING_OR_INVALID")
-        elif using_open_loop_pitch:
-            details.append("PITCH_OPEN_LOOP_ESTIMATE")
+        if using_commanded_pitch:
+            details.append("PITCH_COMMAND_ASSUMED")
         if not feeder_fresh:
             details.append("FEEDER_STATE_STALE")
         elif not feeder_valid:

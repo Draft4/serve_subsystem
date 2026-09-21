@@ -4,7 +4,7 @@ serve_controller_node:
     # 实时定位状态输入，用于判断朝向误差以及机器人是否已经停止。
     robot_state_topic: /localization/robot_state
 
-    # 发球机构实际状态输入，包括在线状态、实际 RPM、实际俯仰角和拨球反馈。
+    # 发球机构实际状态输入，包括在线状态、实际 RPM 和拨球反馈。
     launcher_state_topic: /tennis/launcher/state
 
     # 发布给底盘控制模块的目标 yaw 命令。
@@ -37,9 +37,6 @@ serve_controller_node:
     # 上下轮实际 RPM 相对目标 RPM 的允许误差，例如 0.10 表示允许 ±10%。
     rpm_tolerance_ratio: 0.15
 
-    # 实际俯仰角与目标俯仰角的允许误差绝对值，单位：度。
-    pitch_tolerance_deg: 3.0
-
     # 当前机器人位置与规划时位置的最大允许偏差。超过后本球立即中止并要求重新规划。
     position_tolerance_m: 0.50
 
@@ -52,7 +49,7 @@ serve_controller_node:
     # 底盘在该时间内仍未完成瞄准则本球失败，单位：秒。
     aim_timeout_s: 30.0
 
-    # 底盘已满足要求后，等待轮速和俯仰到位的最长时间，单位：秒。
+    # 底盘已满足要求后，等待轮速到位的最长时间，单位：秒。
     launcher_ready_timeout_s: 20.0
 
     # 拨球确认模式：
@@ -74,4 +71,3 @@ serve_controller_node:
     # 飞轮跨球保持的任务租约，单位：秒。Job Manager 默认每 0.25 秒续租；租约过期
     # 后 Controller 会发布 enabled=false、RPM=0。该值必须大于 command_validity_s。
     launcher_hold_lease_s: 2.5
-

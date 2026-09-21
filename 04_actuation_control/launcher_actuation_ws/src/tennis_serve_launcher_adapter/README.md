@@ -127,8 +127,8 @@ Ctrl+C
 - 上轮方向为 `+1`，下轮方向为 `-1`。
 - 对外机械转速限制为 `0～7857 rpm`。
 - 一次 FEED 必须使用唯一 `command_id`。
-- 默认 `allow_open_loop_pitch=false`。只有 `LauncherPitchState` 提供真实角度字段时
-  `pitch_valid` 才会为 true；严禁在实球测试中把 commanded angle 冒充实际角度。
+- 硬件不提供实际俯仰角反馈。收到有效 setpoint 后，Adapter 将命令俯仰角作为估算值，
+  发球门禁不等待或校验舵机角度反馈。
 - 默认检查轮速反馈的正负方向。若底层只能返回无符号 RPM，必须在确认机械方向后才能将
   `enforce_feedback_direction` 改为 false。
 - 启动时会检查 `tennisbot_launcher` 六种消息所需字段，接口不匹配会立即报出缺失字段，

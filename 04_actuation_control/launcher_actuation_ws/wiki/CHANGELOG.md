@@ -1,5 +1,11 @@
 # 工作空间变更记录
 
+## 未发布 — 命令俯仰模式
+
+- 涉及包：`tennis_serve_launcher_adapter`。
+- 移除实际俯仰角对发球门禁的依赖；有效俯仰命令直接作为估算状态使用，轮速反馈仍为必需条件。
+- 验证：`test_adapter_core.py` 通过；实球发射未验证。
+
 ## 1.3.0 — 2026-09-21
 
 - 涉及包：`tennis_serve_launcher_adapter`。

@@ -7,7 +7,6 @@ serve_launcher_adapter_node:
     wheel_command_topic: /launcher/wheels/command
     wheel_state_topic: /launcher/wheels/state
     pitch_command_topic: /launcher/pitch/command
-    pitch_state_topic: /launcher/pitch/state
     feeder_command_topic: /launcher/feeder/command
     feeder_state_topic: /launcher/feeder/state
 
@@ -24,16 +23,6 @@ serve_launcher_adapter_node:
     # 即使 ROS 时钟停止，接收后的 setpoint 也会按单调时钟在此时间内失效。
     setpoint_receive_timeout_s: 1.2
     pitch_move_time_ms: 1000
-    pitch_settle_margin_s: 0.2
-
-    # 默认必须使用真实俯仰角反馈。只有实验台确认风险后才可改为 true；开启后会在
-    # pitch_move_time_ms + pitch_settle_margin_s 后将命令角度作为开环估算值。
-    allow_open_loop_pitch: false
-
-    # 真实角度字段名。留空时依次自动查找 actual_degrees、measured_degrees、
-    # feedback_degrees；若板端使用其他名称，在这里填写。
-    pitch_actual_field: ""
-
     # 检查实际轮速符号是否与目标方向一致，防止正负号配置错误但绝对 RPM 仍通过门禁。
     # 如果底层反馈明确只提供无符号转速，现场确认后才可关闭。
     enforce_feedback_direction: true

@@ -108,7 +108,6 @@ class ServeJobManagerNode(Node):
         self.declare_parameter("linear_speed_limit_mps", 0.20)
         self.declare_parameter("angular_speed_limit_radps", 0.10)
         self.declare_parameter("rpm_tolerance_ratio", 0.15)
-        self.declare_parameter("pitch_tolerance_deg", 3.0)
         self.heartbeat_timeout_s = float(self.get_parameter("heartbeat_timeout_s").value)
         self.max_pre_feed_retries = int(
             self.get_parameter("max_pre_feed_retries").value)
@@ -133,8 +132,6 @@ class ServeJobManagerNode(Node):
             self.get_parameter("angular_speed_limit_radps").value)
         self.rpm_tolerance_ratio = float(
             self.get_parameter("rpm_tolerance_ratio").value)
-        self.pitch_tolerance_deg = float(
-            self.get_parameter("pitch_tolerance_deg").value)
         self._group = ReentrantCallbackGroup()
         self._lock = threading.RLock()
         self._job = None
@@ -562,7 +559,7 @@ class ServeJobManagerNode(Node):
             return False, "LOCALIZATION_NOT_READY", "live localization is missing, invalid or stale"
         launcher_ready = bool(
             self._launcher and self._launcher.online
-            and self._launcher.rpm_valid and self._launcher.pitch_valid
+            and self._launcher.rpm_valid
             and self._launcher_at
             and time.monotonic() - self._launcher_at <= self.launcher_timeout_s)
         if not launcher_ready:
@@ -888,9 +885,7 @@ class ServeJobManagerNode(Node):
                 message.launcher_rpm_valid
                 and message.upper_rpm_error_ratio <= self.rpm_tolerance_ratio
                 and message.lower_rpm_error_ratio <= self.rpm_tolerance_ratio)
-            message.pitch_ready = bool(
-                message.launcher_pitch_valid
-                and message.pitch_error_deg <= self.pitch_tolerance_deg)
+            message.pitch_ready = True
         self._status_pub.publish(message)
 
 

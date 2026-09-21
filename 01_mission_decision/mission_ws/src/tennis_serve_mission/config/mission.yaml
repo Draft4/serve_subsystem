@@ -35,5 +35,3 @@ serve_job_manager_node:
     linear_speed_limit_mps: 0.20
     angular_speed_limit_radps: 0.10
     rpm_tolerance_ratio: 0.15
-    pitch_tolerance_deg: 3.0
-

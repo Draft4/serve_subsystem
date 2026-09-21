@@ -39,7 +39,7 @@ class ServeControllerNode(Node):
             "localization_timeout_s": 0.8, "launcher_state_timeout_s": 0.8,
             "yaw_tolerance_deg": 5.0, "linear_speed_limit_mps": 0.20,
             "angular_speed_limit_radps": 0.10, "rpm_tolerance_ratio": 0.15,
-            "pitch_tolerance_deg": 3.0, "position_tolerance_m": 0.50,
+            "position_tolerance_m": 0.50,
             "position_mismatch_timeout_s": 0.5,
             "stable_hold_s": 0.20,
             "aim_timeout_s": 30.0, "launcher_ready_timeout_s": 20.0,
@@ -53,7 +53,7 @@ class ServeControllerNode(Node):
             name: float(self.get_parameter(name).value) for name in (
                 "localization_timeout_s", "launcher_state_timeout_s", "yaw_tolerance_deg",
                 "linear_speed_limit_mps", "angular_speed_limit_radps", "rpm_tolerance_ratio",
-                "pitch_tolerance_deg", "position_tolerance_m",
+                "position_tolerance_m",
             )
         })
         self.stable_hold_s = float(self.get_parameter("stable_hold_s").value)
@@ -144,9 +144,8 @@ class ServeControllerNode(Node):
         if message.interface_version != INTERFACE_VERSION:
             return
         self.launcher = LauncherSample(
-            online=message.online, rpm_valid=message.rpm_valid, pitch_valid=message.pitch_valid,
+            online=message.online, rpm_valid=message.rpm_valid,
             upper_rpm=message.upper_actual_rpm, lower_rpm=message.lower_actual_rpm,
-            pitch_deg=message.pitch_actual_deg,
             feed_feedback_supported=message.feed_feedback_supported,
             last_feed_command_id=message.last_feed_command_id,
             feed_result_valid=message.feed_result_valid, feed_succeeded=message.feed_succeeded,
@@ -387,7 +386,7 @@ class ServeControllerNode(Node):
                 now = time.monotonic()
                 gate = evaluate_gates(
                     now, self.robot, self.launcher, shot.target_yaw_rad,
-                    shot.upper_target_rpm, shot.lower_target_rpm, shot.pitch_target_deg,
+                    shot.upper_target_rpm, shot.lower_target_rpm,
                     self.gate_config, shot.robot_x_m, shot.robot_y_m)
                 phase = "AIMING" if not (
                     gate.robot_fresh and gate.yaw_ready and gate.stopped

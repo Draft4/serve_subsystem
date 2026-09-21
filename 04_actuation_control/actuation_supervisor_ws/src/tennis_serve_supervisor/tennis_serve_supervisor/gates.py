@@ -11,10 +11,8 @@ from tennis_serve_common.core import RobotSample, wrap_angle_rad
 class LauncherSample:
     online: bool
     rpm_valid: bool
-    pitch_valid: bool
     upper_rpm: int
     lower_rpm: int
-    pitch_deg: float
     feed_feedback_supported: bool
     last_feed_command_id: str
     feed_result_valid: bool
@@ -30,7 +28,6 @@ class GateConfig:
     linear_speed_limit_mps: float = 0.20
     angular_speed_limit_radps: float = 0.10
     rpm_tolerance_ratio: float = 0.15
-    pitch_tolerance_deg: float = 3.0
     position_tolerance_m: float = 0.50
 
 
@@ -54,12 +51,12 @@ class GateResult:
 
 def evaluate_gates(now_s: float, robot: RobotSample | None, launcher: LauncherSample | None,
                    target_yaw_rad: float, upper_target_rpm: int, lower_target_rpm: int,
-                   pitch_target_deg: float, config: GateConfig,
+                   config: GateConfig,
                    planned_robot_x_m: float | None = None,
                    planned_robot_y_m: float | None = None) -> GateResult:
     robot_fresh = bool(robot and robot.valid and now_s - robot.received_monotonic_s <= config.localization_timeout_s)
     launcher_fresh = bool(
-        launcher and launcher.online and launcher.rpm_valid and launcher.pitch_valid
+        launcher and launcher.online and launcher.rpm_valid
         and now_s - launcher.received_monotonic_s <= config.launcher_state_timeout_s
     )
     yaw_error = math.inf
@@ -80,24 +77,23 @@ def evaluate_gates(now_s: float, robot: RobotSample | None, launcher: LauncherSa
             )
             position_ready = position_error <= config.position_tolerance_m
     upper_error = lower_error = math.inf
-    pitch_error = math.inf
-    rpm_ready = pitch_ready = False
+    pitch_error = 0.0
+    rpm_ready = False
+    pitch_ready = True
     if launcher_fresh and launcher:
         upper_error = abs(launcher.upper_rpm - upper_target_rpm) / max(abs(upper_target_rpm), 1)
         lower_error = abs(launcher.lower_rpm - lower_target_rpm) / max(abs(lower_target_rpm), 1)
-        pitch_error = abs(launcher.pitch_deg - pitch_target_deg)
         rpm_ready = upper_error <= config.rpm_tolerance_ratio and lower_error <= config.rpm_tolerance_ratio
-        pitch_ready = pitch_error <= config.pitch_tolerance_deg
     ready = (
         robot_fresh and launcher_fresh and yaw_ready and stopped
-        and rpm_ready and pitch_ready and position_ready
+        and rpm_ready and position_ready
     )
     failed = []
     for ok, name in (
         (robot_fresh, "ROBOT_STATE_STALE"), (launcher_fresh, "LAUNCHER_STATE_STALE"),
         (yaw_ready, "YAW_NOT_READY"), (stopped, "ROBOT_MOVING"),
         (position_ready, "ROBOT_POSITION_CHANGED"),
-        (rpm_ready, "RPM_NOT_READY"), (pitch_ready, "PITCH_NOT_READY"),
+        (rpm_ready, "RPM_NOT_READY"),
     ):
         if not ok:
             failed.append(name)
@@ -106,4 +102,3 @@ def evaluate_gates(now_s: float, robot: RobotSample | None, launcher: LauncherSa
         position_ready, yaw_error, upper_error, lower_error, pitch_error, position_error,
         "OK" if ready else ",".join(failed),
     )
-

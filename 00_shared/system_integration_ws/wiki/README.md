@@ -51,8 +51,8 @@ ROS 2 Jazzy；公共接口工作空间 `00_shared/interfaces_ws`；外部定位�
 使用 `scripts/setup_env.sh` 可导入关键 Python 模块并加载发球模型。相关 33 项
 单元测试通过，集成 launch 的参数解析通过。完整 ROS 图与实球发射尚未验证。
 
-板端现有 `tennisbot_launcher/msg/LauncherPitchState` 无实测俯仰角字段。
-Adapter 默认要求真实俯仰反馈，故实球流程会停在俯仰安全门禁；需与设备接口负责人
-确认反馈来源后再做实球联调。现有 `tennis-serve-launcher-adapter.service` 虽已启用，
+板端现有 `tennisbot_launcher/msg/LauncherPitchState` 无实测俯仰角字段。发球 Adapter
+已改为只下发俯仰命令，以命令角度作为估算值；发球许可不校验实际俯仰反馈。现有
+`tennis-serve-launcher-adapter.service` 虽已启用，
 其已安装的 unit 仍指向旧 `/home/pi/tennis_serve/ros2_ws`，启用新版本前需更新
 systemd unit。板端本次未启动发球相关服务。

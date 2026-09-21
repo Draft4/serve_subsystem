@@ -32,7 +32,7 @@ def test_relaxed_thresholds_are_configuration():
     config = (SUPERVISOR / "config" / "supervisor.yaml").read_text(encoding="utf-8")
     for expected in (
         "yaw_tolerance_deg: 5.0", "linear_speed_limit_mps: 0.20",
-        "rpm_tolerance_ratio: 0.15", "pitch_tolerance_deg: 3.0",
+        "rpm_tolerance_ratio: 0.15",
         "stable_hold_s: 0.20", "feed_dwell_s: 1.0",
         "feed_confirmation_mode: feedback", "feed_confirmation_timeout_s: 8.5",
         "launcher_hold_lease_s: 2.5", "position_tolerance_m: 0.50",
@@ -106,15 +106,16 @@ def test_main_launch_does_not_duplicate_systemd_launcher_adapter():
     assert 'serve_launcher_adapter_node' not in launch
 
 
-def test_start_preflight_requires_fresh_valid_launcher_feedback():
+def test_start_preflight_requires_fresh_valid_rpm_feedback():
     manager = (MISSION / "tennis_serve_mission" / "job_manager_node.py").read_text(encoding="utf-8")
     assert 'return False, "LAUNCHER_NOT_READY", detail' in manager
-    assert "self._launcher.rpm_valid and self._launcher.pitch_valid" in manager
+    assert "and self._launcher.rpm_valid" in manager
+    assert "pitch_tolerance_deg" not in manager
 
 
-def test_http_execution_allowed_requires_rpm_and_pitch_validity():
+def test_http_execution_allowed_requires_rpm_validity():
     bridge = (OPERATOR / "tennis_serve_operator" / "bridge_node.py").read_text(encoding="utf-8")
-    assert "launcher_online and launcher.rpm_valid and launcher.pitch_valid" in bridge
+    assert "launcher_online and launcher.rpm_valid" in bridge
 
 
 def test_http_status_bridges_the_real_launcher_arm_state():
