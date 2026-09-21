@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import math
 import threading
 import time
@@ -367,7 +366,7 @@ class ServeControllerNode(Node):
             value.gates_ready = gate.ready; value.detail = gate.detail
         return value
 
-    async def _execute(self, goal_handle):
+    def _execute(self, goal_handle):
         goal = goal_handle.request
         shot = goal.shot
         result = ExecuteShot.Result()
@@ -434,7 +433,7 @@ class ServeControllerNode(Node):
                     result.code = "AIM_TIMEOUT" if phase == "AIMING" else "LAUNCHER_READY_TIMEOUT"
                     result.message = gate.detail
                     goal_handle.abort(); return result
-                await asyncio.sleep(0.05)
+                time.sleep(0.05)
 
             goal_handle.publish_feedback(self._feedback("READY_TO_FEED", gate))
             command = FeedCommand()
@@ -465,7 +464,7 @@ class ServeControllerNode(Node):
                         goal_handle.abort(); return result
                     confirmed = True
                     break
-                await asyncio.sleep(0.02)
+                time.sleep(0.02)
             if self.feed_mode == "feedback" and not confirmed:
                 result.feed_triggered = True
                 result.code = "FEED_CONFIRMATION_TIMEOUT"
