@@ -1,0 +1,5 @@
+string command_id
+---
+bool accepted
+string code
+string message

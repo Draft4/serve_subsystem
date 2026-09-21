@@ -1,0 +1,22 @@
+[Unit]
+Description=Tennis serve launcher ROS 2 hardware adapter
+After=network-online.target tennisbot-launcher-gateway.service
+Wants=network-online.target
+Requires=tennisbot-launcher-gateway.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+Environment=HOME=/home/pi
+EnvironmentFile=-/etc/tennis_robot/tennis_serve.env
+WorkingDirectory=/home/pi/Tennis_robot
+ExecStart=/bin/bash -lc 'source /home/pi/Tennis_robot/00_shared/system_integration_ws/scripts/setup_env.sh && exec ros2 launch tennis_serve_launcher_adapter launcher_adapter.launch.py'
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+KillSignal=SIGINT
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

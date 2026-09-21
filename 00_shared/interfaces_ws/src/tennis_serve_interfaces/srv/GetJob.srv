@@ -1,0 +1,6 @@
+string job_id
+---
+bool found
+string code
+string message
+string job_json

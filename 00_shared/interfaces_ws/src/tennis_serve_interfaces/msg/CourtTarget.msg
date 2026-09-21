@@ -1,0 +1,6 @@
+float64 center_x_m
+float64 center_y_m
+float64 width_m
+float64 depth_m
+float64 net_height_min_m
+float64 net_height_max_m

@@ -1,0 +1,15 @@
+string request_id
+string client_id
+string name
+string mode
+tennis_serve_interfaces/TrainingStep[] steps
+uint16 cycles
+float64 cycle_rest_s
+float64 countdown_s
+bool stop_wheels_during_rest
+---
+bool accepted
+string code
+string message
+string job_id
+string job_json

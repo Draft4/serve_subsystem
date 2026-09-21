@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "model_version": "tennis-launcher-strategy-v1.1.0",
+  "model_snapshot_sha256": "ac8348450aa264422c7697c8473bde567dadaf15f5407e7fd1e7cb8ed170cea4",
+  "source_workbook_sha256": "6128302d2d0417be0fc9dd89a99d06ef1cf8eabdba5012eabeb615aa53979746",
+  "files": [
+    "launcher_strategy/",
+    "model_snapshot.json",
+    "training_data.xlsx",
+    "requirements.txt",
+    "example_usage.py",
+    "README.md"
+  ]
+}

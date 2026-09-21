@@ -1,0 +1,14 @@
+std_msgs/Header header
+uint16 interface_version
+uint32 sequence
+bool online
+bool rpm_valid
+bool pitch_valid
+int32 upper_actual_rpm
+int32 lower_actual_rpm
+float64 pitch_actual_deg
+bool feed_feedback_supported
+string last_feed_command_id
+bool feed_result_valid
+bool feed_succeeded
+string detail

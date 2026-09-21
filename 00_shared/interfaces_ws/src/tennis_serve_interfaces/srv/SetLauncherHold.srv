@@ -1,0 +1,8 @@
+string job_id
+string command_id
+bool enabled
+string reason
+---
+bool accepted
+string code
+string message

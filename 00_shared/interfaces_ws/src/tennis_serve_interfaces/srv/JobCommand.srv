@@ -1,0 +1,9 @@
+string job_id
+string command_id
+string client_id
+string action
+---
+bool accepted
+string code
+string message
+string job_json

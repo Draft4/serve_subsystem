@@ -1,0 +1,10 @@
+std_msgs/Header header
+uint16 interface_version
+string job_id
+string shot_id
+string command_id
+int32 upper_target_rpm
+int32 lower_target_rpm
+float64 pitch_target_deg
+bool enabled
+builtin_interfaces/Time valid_until

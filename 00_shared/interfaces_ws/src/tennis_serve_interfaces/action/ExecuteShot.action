@@ -1,0 +1,17 @@
+string job_id
+string shot_id
+tennis_serve_interfaces/PlannedShot shot
+---
+bool success
+bool feed_triggered
+bool feed_confirmed
+string code
+string message
+---
+string phase
+float64 yaw_error_deg
+float64 upper_rpm_error_ratio
+float64 lower_rpm_error_ratio
+float64 pitch_error_deg
+bool gates_ready
+string detail

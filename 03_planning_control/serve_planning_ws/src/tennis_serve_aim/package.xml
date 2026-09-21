@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tennis_serve_aim</name>
+  <version>0.7.0</version>
+  <description>tennis_serve_aim for the tennis serving subsystem.</description>
+  <maintainer email="robot@example.invalid">Tennis Robot Team</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>tennis_serve_interfaces</exec_depend>
+  <exec_depend>tennis_serve_common</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
+

@@ -1,0 +1,22 @@
+[Unit]
+Description=Tennis serve integration nodes
+After=network-online.target tennis-serve-launcher-adapter.service
+Wants=network-online.target tennis-serve-launcher-adapter.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+Environment=HOME=/home/pi
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/tennis_robot/tennis_serve.env
+WorkingDirectory=/home/pi/Tennis_robot
+ExecStart=/bin/bash -lc 'source /home/pi/Tennis_robot/00_shared/system_integration_ws/scripts/setup_env.sh && exec ros2 launch tennis_serve tennis_serve.launch.py'
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=10
+KillSignal=SIGINT
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

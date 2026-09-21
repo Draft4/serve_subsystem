@@ -1,0 +1,7 @@
+string job_id
+string client_id
+---
+bool accepted
+string code
+string message
+string job_json

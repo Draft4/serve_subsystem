@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tennis_serve_launcher_adapter</name>
+  <version>1.3.0</version>
+  <description>
+    Adapter between tennis_serve strategy topics and the launcher hardware topics.
+  </description>
+  <maintainer email="robot@example.invalid">Tennis Robot Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>tennis_serve_interfaces</exec_depend>
+  <exec_depend>tennisbot_launcher</exec_depend>
+
+  <test_depend>ament_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

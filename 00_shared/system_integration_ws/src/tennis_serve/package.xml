@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tennis_serve</name>
+  <version>0.7.0</version>
+  <description>Integrated launch for the tennis serving subsystem.</description>
+  <maintainer email="robot@example.invalid">Tennis Robot Team</maintainer>
+  <license>Proprietary</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>tennis_serve_aim</exec_depend>
+  <exec_depend>tennis_serve_launcher_planning</exec_depend>
+  <exec_depend>tennis_serve_supervisor</exec_depend>
+  <exec_depend>tennis_serve_mission</exec_depend>
+  <exec_depend>tennis_serve_operator</exec_depend>
+  <test_depend>ament_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>tennis_serve_common</test_depend>
+  <test_depend>tennis_serve_supervisor</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

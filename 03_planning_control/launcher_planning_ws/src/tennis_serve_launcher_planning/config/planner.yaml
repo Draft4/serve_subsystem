@@ -1,0 +1,14 @@
+# ======================== 发球参数规划节点 ========================
+serve_planner_node:
+  ros__parameters:
+    # 实时定位状态输入。消息类型：tennisbot_interfaces/msg/RobotState。
+    robot_state_topic: /localization/robot_state
+
+    # 定位最大允许年龄。超过该时间未收到有效定位时，拒绝规划发球参数。
+    localization_timeout_s: 1.0
+
+    # RobotState 已使用本方底线左角作为 X/Y 原点，与 court_origin_v2 一致。
+    # 场地坐标若仅小幅越界会被夹紧，超过该容差则拒绝。
+    machine_boundary_tolerance_m: 1.0
+
+

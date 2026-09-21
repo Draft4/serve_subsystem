@@ -1,0 +1,77 @@
+# ======================== 单球执行与安全门禁节点 ========================
+serve_controller_node:
+  ros__parameters:
+    # 实时定位状态输入，用于判断朝向误差以及机器人是否已经停止。
+    robot_state_topic: /localization/robot_state
+
+    # 发球机构实际状态输入，包括在线状态、实际 RPM、实际俯仰角和拨球反馈。
+    launcher_state_topic: /tennis/launcher/state
+
+    # 发布给底盘控制模块的目标 yaw 命令。
+    chassis_aim_topic: /tennis/chassis/aim_command
+
+    # 发布给发球机构适配模块的上下轮 RPM 和俯仰角目标。
+    launcher_setpoint_topic: /tennis/launcher/setpoint
+
+    # 一次性拨球命令。每球只发布一次，并通过 command_id 去重。
+    feed_command_topic: /tennis/launcher/feed_command
+
+    # 急停输入。收到 true 后 Controller 会锁存急停并立即停止底盘目标和飞轮。
+    emergency_stop_topic: /tennis/emergency_stop
+
+    # 定位数据最大允许年龄。超过该值后定位门禁不通过，单位：秒。
+    localization_timeout_s: 0.8
+
+    # 发球机构反馈最大允许年龄。超过该值后机构门禁不通过，单位：秒。
+    launcher_state_timeout_s: 0.8
+
+    # 允许的底盘 yaw 误差绝对值，单位：度。调大更容易通过，但落点方向误差会增大。
+    yaw_tolerance_deg: 5.0
+
+    # 允许的机器人平移速度上限，单位：m/s。超过该值禁止拨球。
+    linear_speed_limit_mps: 0.20
+
+    # 允许的机器人偏航角速度上限，单位：rad/s。超过该值禁止拨球。
+    angular_speed_limit_radps: 0.10
+
+    # 上下轮实际 RPM 相对目标 RPM 的允许误差，例如 0.10 表示允许 ±10%。
+    rpm_tolerance_ratio: 0.15
+
+    # 实际俯仰角与目标俯仰角的允许误差绝对值，单位：度。
+    pitch_tolerance_deg: 3.0
+
+    # 当前机器人位置与规划时位置的最大允许偏差。超过后本球立即中止并要求重新规划。
+    position_tolerance_m: 0.50
+
+    # 位置偏差需持续超过此时间才中止本次尝试，过滤定位瞬时跳变。
+    position_mismatch_timeout_s: 0.5
+
+    # 所有门禁连续满足多长时间后才允许拨球，用于过滤瞬时抖动，单位：秒。
+    stable_hold_s: 0.20
+
+    # 底盘在该时间内仍未完成瞄准则本球失败，单位：秒。
+    aim_timeout_s: 30.0
+
+    # 底盘已满足要求后，等待轮速和俯仰到位的最长时间，单位：秒。
+    launcher_ready_timeout_s: 20.0
+
+    # 拨球确认模式：
+    #   timed    - 发布拨球命令后等待 feed_dwell_s，不要求硬件回传确认；
+    #   feedback - 必须在 LauncherState 中收到匹配 command_id 的成功反馈。
+    feed_confirmation_mode: feedback
+
+    # 拨球命令发布后的等待时间，单位：秒。等待期间飞轮 setpoint 仍会持续刷新。
+    feed_dwell_s: 1.0
+
+    # feedback 模式下等待硬件拨球结果的最长时间。应略大于 Adapter 的
+    # feed_result_timeout_s（当前为 8.0 秒）；超时会令本球和任务失败，不再把未出球
+    # 误记为成功。
+    feed_confirmation_timeout_s: 8.5
+
+    # 每条底盘/飞轮目标命令的有效期，单位：秒。下层必须在超时后丢弃旧命令并安全停机。
+    command_validity_s: 1.0
+
+    # 飞轮跨球保持的任务租约，单位：秒。Job Manager 默认每 0.25 秒续租；租约过期
+    # 后 Controller 会发布 enabled=false、RPM=0。该值必须大于 command_validity_s。
+    launcher_hold_lease_s: 2.5
+

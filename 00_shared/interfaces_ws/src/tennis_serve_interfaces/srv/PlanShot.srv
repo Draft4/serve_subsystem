@@ -1,0 +1,8 @@
+string request_id
+string step_id
+tennis_serve_interfaces/CourtTarget target
+---
+bool ok
+string code
+string message
+tennis_serve_interfaces/PlannedShot shot

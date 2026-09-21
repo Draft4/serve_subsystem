@@ -1,0 +1,7 @@
+---
+bool ready
+string code
+string message
+string model_version
+string model_sha256
+string metadata_json

@@ -1,0 +1,39 @@
+# ======================== 训练任务管理节点 ========================
+serve_job_manager_node:
+  ros__parameters:
+    # Windows 上位机心跳超时。RUNNING 状态超过该时间没有心跳会自动暂停并停轮。
+    heartbeat_timeout_s: 10.0
+
+    # 仅对尚未发布拨球命令的失败进行重新规划和重试。
+    max_pre_feed_retries: 2
+
+    # 训练任务规模和时间范围。均为调度资源参数，可按实际训练需求继续放宽。
+    max_job_steps: 500
+    max_job_cycles: 999
+    max_step_repeat: 1000
+    min_shot_interval_s: 0.2
+    max_shot_interval_s: 3600.0
+    max_total_shots: 10000
+    max_countdown_s: 600.0
+    max_cycle_rest_s: 3600.0
+
+    # 任务进度、目标值、实际值和各项门禁结果的汇总状态输出，默认发布频率 10 Hz。
+    status_topic: /tennis/serve_status
+
+    # 实时定位输入，用于开始/恢复任务前的定位有效性检查以及状态汇总。
+    robot_state_topic: /localization/robot_state
+
+    # 发球机构实际状态输入，用于状态汇总。
+    launcher_state_topic: /tennis/launcher/state
+
+    # 开始或恢复任务时允许的定位和机构状态最大年龄。
+    localization_timeout_s: 1.0
+    launcher_state_timeout_s: 1.0
+
+    # 状态汇总使用与 Controller 相同的门限，避免界面与实际门禁不一致。
+    yaw_tolerance_deg: 5.0
+    linear_speed_limit_mps: 0.20
+    angular_speed_limit_radps: 0.10
+    rpm_tolerance_ratio: 0.15
+    pitch_tolerance_deg: 3.0
+
