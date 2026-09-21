@@ -42,7 +42,7 @@ class ServeControllerNode(Node):
             "position_mismatch_timeout_s": 0.5,
             "stable_hold_s": 0.20,
             "aim_timeout_s": 30.0, "launcher_ready_timeout_s": 20.0,
-            "feed_confirmation_mode": "feedback", "feed_dwell_s": 1.0,
+            "feed_confirmation_mode": "timed", "feed_dwell_s": 1.0,
             "feed_confirmation_timeout_s": 8.5,
             "command_validity_s": 1.0, "launcher_hold_lease_s": 2.5,
         }

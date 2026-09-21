@@ -242,16 +242,13 @@ class ServeLauncherAdapterNode(Node):
                 or self.setpoint.shot_id != message.shot_id):
             self._reject_feed(message, "FEED_REJECTED_NO_MATCHING_SETPOINT", now_s)
             return
-        feeder_fresh = bool(
-            self.feeder_state is not None
-            and now_s - self.feeder_received_s <= self.state_timeout_s)
-        if (not feeder_fresh or not self.feeder_state.valid
-                or self.feeder_state.state == FEEDER_FAULT_STATE
-                or self.feeder_state.error):
-            self._reject_feed(message, "FEED_REJECTED_FEEDER_STATE_INVALID", now_s)
-            return
-        self.feed_tracker.start(
-            message.command_id, int(self.feeder_state.completed_count), now_s)
+        # The current feeder hardware does not provide a usable state
+        # feedback channel.  The command is therefore forwarded and the
+        # supervisor uses a timed dwell instead of waiting for confirmation.
+        completed_count = (
+            int(self.feeder_state.completed_count)
+            if self.feeder_state is not None else 0)
+        self.feed_tracker.start(message.command_id, completed_count, now_s)
         command = LauncherFeederCommand()
         command.header.stamp = self.get_clock().now().to_msg()
         command.command = LauncherFeederCommand.FEED
