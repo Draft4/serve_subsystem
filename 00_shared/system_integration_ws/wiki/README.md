@@ -5,10 +5,28 @@
 
 ## 协作仓库与部署
 
-开发阶段统一在一个协作 Git 仓库中维护本工作空间与其余发球工作空间，
-同一次跨工作空间接口改动共同提交。板端部署时只迁移本工作空间目录，
-仍按所属层级放置并重新构建；运行时不依赖协作仓库的上层目录。
-若后续拆为独立仓库，应保留版本记录并核对跨工作空间依赖。
+板端部署前，`serve_planning_ws` 只是发球组协同修改和优化代码的临时目录；
+其中的 `serve_subsystem` 是[协作 Git 仓库](https://github.com/Draft4/serve_subsystem)。
+两级目录都不作为板端运行路径，也不需要一起复制到 RK3588。
+开发阶段跨工作空间的接口改动在同一仓库提交；部署时只迁移各个工作空间，
+按下表所属层级放在 `/home/pi/Tennis_robot/<层级>/<工作空间>_ws`，并在板端重建。
+运行时代码、launch、服务模板和配置不依赖临时目录名称。
+
+| 层级 | 工作空间 | 职责 |
+| --- | --- | --- |
+| `00_shared` | [interfaces_ws](../../../00_shared/interfaces_ws/README.md) | 跨层接口与公共坐标计算 |
+| `00_shared` | [system_integration_ws](../README.md) | 组合启动、构建脚本与部署模板 |
+| `01_mission_decision` | [mission_ws](../../../01_mission_decision/mission_ws/README.md) | 任务状态机、逐球调度和心跳 |
+| `01_mission_decision` | [operator_ws](../../../01_mission_decision/operator_ws/README.md) | Windows 上位机的 HTTP/ROS 接口 |
+| `03_planning_control` | [serve_planning_ws](../../../03_planning_control/serve_planning_ws/README.md) | 从当前位置计算发球朝向，无发球路径规划 |
+| `03_planning_control` | [launcher_planning_ws](../../../03_planning_control/launcher_planning_ws/README.md) | 轮速、俯仰与模型参数规划 |
+| `04_actuation_control` | [actuation_supervisor_ws](../../../04_actuation_control/actuation_supervisor_ws/README.md) | 执行许可、安全门禁与拨球时机 |
+| `04_actuation_control` | [launcher_actuation_ws](../../../04_actuation_control/launcher_actuation_ws/README.md) | 将命令适配到现有硬件 ROS 话题 |
+
+任务层决定何时发球；规划层只输出朝向和发球参数目标；执行监督层检查许可并发布
+底盘朝向、发球机参数和拨球命令；Adapter 对接既有硬件 ROS 接口。
+本组代码不接管 CAN/F407 驱动。移入板端时不复制本地 `build/`、`install/`、`log/`
+或本机凭据。若后续将协作仓库拆成独立仓库，应保留版本记录并核对跨工作空间依赖。
 
 ## 依赖与环境
 
