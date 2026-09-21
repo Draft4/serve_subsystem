@@ -46,7 +46,9 @@
 外部依赖，提供 `tennisbot_interfaces` 和 `tennisbot_launcher`。部署路径、
 构建顺序和运行环境见 [系统集成工作空间说明](00_shared/system_integration_ws/README.md)。
 生产启动由 `tennis_serve` 集成 launch 与独立的 Adapter 服务组成；不要同时重复启动
-Adapter。板端完整 ROS 图和实球效果仍需现场验证。
+Adapter。板端已完成 9 包清洁构建及 33 项单元测试；完整 ROS 图和实球效果仍需现场验证。
+当前板端俯仰状态接口缺少实测角度，Adapter 会按默认安全门禁阻止发球；
+已安装的发球 systemd unit 仍指向旧路径，启用新版本前需更新。
 
 模型快照随 `launcher_planning_ws` 版本管理；
 [模型说明](03_planning_control/launcher_planning_ws/src/tennis_serve_launcher_planning/wiki/algorithms.md)

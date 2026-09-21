@@ -34,7 +34,7 @@ ROS 2 Jazzy；公共接口工作空间 `00_shared/interfaces_ws`；外部定位�
 `tennisbot_interfaces`，现有设备工作空间提供 `tennisbot_launcher`。
 只有本工作空间实际声明的依赖才需在对应节点运行时存在，详见各包 `package.xml`。
 板端当前外部 underlay 为 `/home/pi/localization_ws` 和
-`/home/pi/Sensor_Publication/ros2_ws`；本组工作空间按层级放在
+`/home/pi/Tennis_robot/05_device_drivers/can_gateway_ws`；本组工作空间按层级放在
 `/home/pi/Tennis_robot/` 下。无需启动的工作空间可独立构建；完整系统按
 `00_shared/system_integration_ws/scripts/build_all.sh` 的顺序构建。
 
@@ -44,4 +44,15 @@ ROS 2 Jazzy；公共接口工作空间 `00_shared/interfaces_ws`；外部定位�
 - [工作空间版本记录](CHANGELOG.md)
 - [源码入口](../src/)
 
-本次仅补齐文档和仓库结构；RK3588 的完整 ROS 图与实球测试**未验证**。
+## 当前板端验证状态
+
+2026-09-21 在 RK3588 上将本组 8 个工作空间的旧 `build/`、`install/`、`log/`
+移到板端备份目录后，按 `scripts/build_all.sh` 完成清洁构建，共构建 9 个包；
+使用 `scripts/setup_env.sh` 可导入关键 Python 模块并加载发球模型。相关 33 项
+单元测试通过，集成 launch 的参数解析通过。完整 ROS 图与实球发射尚未验证。
+
+板端现有 `tennisbot_launcher/msg/LauncherPitchState` 无实测俯仰角字段。
+Adapter 默认要求真实俯仰反馈，故实球流程会停在俯仰安全门禁；需与设备接口负责人
+确认反馈来源后再做实球联调。现有 `tennis-serve-launcher-adapter.service` 虽已启用，
+其已安装的 unit 仍指向旧 `/home/pi/tennis_serve/ros2_ws`，启用新版本前需更新
+systemd unit。板端本次未启动发球相关服务。

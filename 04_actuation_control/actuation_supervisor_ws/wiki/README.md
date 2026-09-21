@@ -16,7 +16,7 @@ ROS 2 Jazzy；公共接口工作空间 `00_shared/interfaces_ws`；外部定位�
 `tennisbot_interfaces`，现有设备工作空间提供 `tennisbot_launcher`。
 只有本工作空间实际声明的依赖才需在对应节点运行时存在，详见各包 `package.xml`。
 板端当前外部 underlay 为 `/home/pi/localization_ws` 和
-`/home/pi/Sensor_Publication/ros2_ws`；本组工作空间按层级放在
+`/home/pi/Tennis_robot/05_device_drivers/can_gateway_ws`；本组工作空间按层级放在
 `/home/pi/Tennis_robot/` 下。无需启动的工作空间可独立构建；完整系统按
 `00_shared/system_integration_ws/scripts/build_all.sh` 的顺序构建。
 

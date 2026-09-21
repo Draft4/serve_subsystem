@@ -4,7 +4,7 @@ set -e
 TENNIS_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source /opt/ros/jazzy/setup.bash
 source /home/pi/localization_ws/install/local_setup.bash
-source /home/pi/Sensor_Publication/ros2_ws/install/local_setup.bash
+source "$TENNIS_PROJECT_ROOT/05_device_drivers/can_gateway_ws/install/local_setup.bash"
 
 for workspace in \
   00_shared/interfaces_ws \
