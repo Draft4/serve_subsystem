@@ -55,15 +55,8 @@ serve_controller_node:
     # 拨球确认模式：
     #   timed    - 发布拨球命令后等待 feed_dwell_s，不要求硬件回传确认；
     #   feedback - 必须在 LauncherState 中收到匹配 command_id 的成功反馈。
-    feed_confirmation_mode: timed
-
     # 拨球命令发布后的等待时间，单位：秒。等待期间飞轮 setpoint 仍会持续刷新。
     feed_dwell_s: 1.0
-
-    # feedback 模式下等待硬件拨球结果的最长时间。应略大于 Adapter 的
-    # feed_result_timeout_s（当前为 8.0 秒）；超时会令本球和任务失败，不再把未出球
-    # 误记为成功。
-    feed_confirmation_timeout_s: 8.5
 
     # 每条底盘/飞轮目标命令的有效期，单位：秒。下层必须在超时后丢弃旧命令并安全停机。
     command_validity_s: 1.0

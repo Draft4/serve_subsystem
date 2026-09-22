@@ -34,7 +34,6 @@ def test_relaxed_thresholds_are_configuration():
         "yaw_tolerance_deg: 5.0", "linear_speed_limit_mps: 0.20",
         "rpm_tolerance_ratio: 0.15",
         "stable_hold_s: 0.20", "feed_dwell_s: 1.0",
-        "feed_confirmation_mode: feedback", "feed_confirmation_timeout_s: 8.5",
         "launcher_hold_lease_s: 2.5", "position_tolerance_m: 0.50",
     ):
         assert expected in config
@@ -64,7 +63,7 @@ def test_emergency_stop_has_an_acknowledged_reset_contract():
 
 def test_controller_holds_successful_shots_and_stops_failed_shots():
     controller = (SUPERVISOR / "tennis_serve_supervisor" / "controller_node.py").read_text(encoding="utf-8")
-    assert "self.create_timer(0.05, self._refresh_launcher_setpoint" in controller
+    assert "self.create_timer(0.1, self._refresh_launcher_setpoint" in controller
     assert "if not completed_successfully:" in controller
     assert "self._publish_launcher_stop(goal.job_id, goal.shot_id" in controller
     assert "self.feed_pub.publish(command)" in controller
@@ -95,10 +94,11 @@ def test_controller_logs_each_action_goal_rejection_reason():
         assert code in controller
 
 
-def test_feedback_mode_fails_closed_when_feed_is_not_confirmed():
+def test_feed_feedback_code_is_not_used_by_controller():
     controller = (SUPERVISOR / "tennis_serve_supervisor" / "controller_node.py").read_text(encoding="utf-8")
-    assert 'result.code = "FEED_CONFIRMATION_TIMEOUT"' in controller
-    assert 'if self.feed_mode == "feedback" and not confirmed:' in controller
+    assert "feed_feedback_supported" not in controller
+    assert "feed_confirmation_timeout_s" not in controller
+    assert "self.feed_mode" not in controller
 
 
 def test_main_launch_does_not_duplicate_systemd_launcher_adapter():

@@ -9,7 +9,7 @@ import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from std_msgs.msg import Bool
@@ -42,8 +42,7 @@ class ServeControllerNode(Node):
             "position_mismatch_timeout_s": 0.5,
             "stable_hold_s": 0.20,
             "aim_timeout_s": 30.0, "launcher_ready_timeout_s": 20.0,
-            "feed_confirmation_mode": "timed", "feed_dwell_s": 1.0,
-            "feed_confirmation_timeout_s": 8.5,
+            "feed_dwell_s": 1.0,
             "command_validity_s": 1.0, "launcher_hold_lease_s": 2.5,
         }
         for name, value in defaults.items():
@@ -60,13 +59,8 @@ class ServeControllerNode(Node):
             self.get_parameter("position_mismatch_timeout_s").value)
         self.aim_timeout_s = float(self.get_parameter("aim_timeout_s").value)
         self.launcher_timeout_s = float(self.get_parameter("launcher_ready_timeout_s").value)
-        self.feed_mode = str(self.get_parameter("feed_confirmation_mode").value)
-        if self.feed_mode not in {"timed", "feedback"}:
-            raise ValueError("feed_confirmation_mode must be timed or feedback")
         self.feed_dwell_s = float(self.get_parameter("feed_dwell_s").value)
-        self.feed_confirmation_timeout_s = float(
-            self.get_parameter("feed_confirmation_timeout_s").value)
-        if self.feed_dwell_s <= 0.0 or self.feed_confirmation_timeout_s <= 0.0:
+        if self.feed_dwell_s <= 0.0:
             raise ValueError("feed timing parameters must be positive")
         self.validity_s = float(self.get_parameter("command_validity_s").value)
         self.hold_lease_s = float(self.get_parameter("launcher_hold_lease_s").value)
@@ -115,7 +109,7 @@ class ServeControllerNode(Node):
         self.create_service(
             ResetEmergencyStop, "/tennis/serve/reset_emergency_stop", self._reset_estop,
             callback_group=self._group)
-        self.create_timer(0.05, self._refresh_launcher_setpoint, callback_group=self._group)
+        self.create_timer(0.1, self._refresh_launcher_setpoint, callback_group=self._group)
         self.action_server = ActionServer(
             self, ExecuteShot, "/tennis/serve/execute_shot",
             execute_callback=self._execute,
@@ -145,9 +139,6 @@ class ServeControllerNode(Node):
         self.launcher = LauncherSample(
             online=message.online, rpm_valid=message.rpm_valid,
             upper_rpm=message.upper_actual_rpm, lower_rpm=message.lower_actual_rpm,
-            feed_feedback_supported=message.feed_feedback_supported,
-            last_feed_command_id=message.last_feed_command_id,
-            feed_result_valid=message.feed_result_valid, feed_succeeded=message.feed_succeeded,
             received_monotonic_s=time.monotonic())
 
     def _estop_callback(self, message: Bool) -> None:
@@ -362,7 +353,6 @@ class ServeControllerNode(Node):
             value.yaw_error_deg = gate.yaw_error_deg if math.isfinite(gate.yaw_error_deg) else 999.0
             value.upper_rpm_error_ratio = gate.upper_error_ratio if math.isfinite(gate.upper_error_ratio) else 999.0
             value.lower_rpm_error_ratio = gate.lower_error_ratio if math.isfinite(gate.lower_error_ratio) else 999.0
-            value.pitch_error_deg = gate.pitch_error_deg if math.isfinite(gate.pitch_error_deg) else 999.0
             value.gates_ready = gate.ready; value.detail = gate.detail
         return value
 
@@ -433,7 +423,7 @@ class ServeControllerNode(Node):
                     result.code = "AIM_TIMEOUT" if phase == "AIMING" else "LAUNCHER_READY_TIMEOUT"
                     result.message = gate.detail
                     goal_handle.abort(); return result
-                time.sleep(0.05)
+                time.sleep(0.1)
 
             goal_handle.publish_feedback(self._feedback("READY_TO_FEED", gate))
             command = FeedCommand()
@@ -448,32 +438,10 @@ class ServeControllerNode(Node):
             feed_published = True
             goal_handle.publish_feedback(self._feedback("FEED_TRIGGERED", gate))
             goal_handle.publish_feedback(self._feedback("FEED_DWELL", gate))
-            wait_s = (
-                self.feed_confirmation_timeout_s
-                if self.feed_mode == "feedback" else self.feed_dwell_s)
-            deadline = time.monotonic() + wait_s
-            confirmed = False
-            while time.monotonic() < deadline:
-                launcher = self.launcher
-                if (self.feed_mode == "feedback" and launcher
-                        and launcher.feed_feedback_supported and launcher.feed_result_valid
-                        and launcher.last_feed_command_id == feed_id):
-                    if not launcher.feed_succeeded:
-                        result.feed_triggered = True; result.code = "FEED_FAILED"
-                        result.message = "launcher reported feed failure"
-                        goal_handle.abort(); return result
-                    confirmed = True
-                    break
-                time.sleep(0.02)
-            if self.feed_mode == "feedback" and not confirmed:
-                result.feed_triggered = True
-                result.code = "FEED_CONFIRMATION_TIMEOUT"
-                result.message = "launcher did not confirm feed before timeout"
-                goal_handle.abort()
-                return result
-            result.success = True; result.feed_triggered = True; result.feed_confirmed = confirmed
-            result.code = "SHOT_CONFIRMED" if confirmed else "SHOT_TRIGGERED_UNCONFIRMED"
-            result.message = "hardware confirmed feed" if confirmed else "feed dwell elapsed without hardware confirmation"
+            time.sleep(self.feed_dwell_s)
+            result.success = True; result.feed_triggered = True; result.feed_confirmed = False
+            result.code = "SHOT_TRIGGERED_UNCONFIRMED"
+            result.message = "feed dwell elapsed without hardware confirmation"
             completed_successfully = True
             goal_handle.succeed()
             return result
@@ -492,7 +460,7 @@ class ServeControllerNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = ServeControllerNode()
-    executor = MultiThreadedExecutor(num_threads=4)
+    executor = SingleThreadedExecutor()
     executor.add_node(node)
     try:
         executor.spin()

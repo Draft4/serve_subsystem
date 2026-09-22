@@ -13,10 +13,6 @@ class LauncherSample:
     rpm_valid: bool
     upper_rpm: int
     lower_rpm: int
-    feed_feedback_supported: bool
-    last_feed_command_id: str
-    feed_result_valid: bool
-    feed_succeeded: bool
     received_monotonic_s: float
 
 
@@ -39,12 +35,10 @@ class GateResult:
     yaw_ready: bool
     stopped: bool
     rpm_ready: bool
-    pitch_ready: bool
     position_ready: bool
     yaw_error_deg: float
     upper_error_ratio: float
     lower_error_ratio: float
-    pitch_error_deg: float
     position_error_m: float
     detail: str
 
@@ -77,9 +71,7 @@ def evaluate_gates(now_s: float, robot: RobotSample | None, launcher: LauncherSa
             )
             position_ready = position_error <= config.position_tolerance_m
     upper_error = lower_error = math.inf
-    pitch_error = 0.0
     rpm_ready = False
-    pitch_ready = True
     if launcher_fresh and launcher:
         upper_error = abs(launcher.upper_rpm - upper_target_rpm) / max(abs(upper_target_rpm), 1)
         lower_error = abs(launcher.lower_rpm - lower_target_rpm) / max(abs(lower_target_rpm), 1)
@@ -98,7 +90,7 @@ def evaluate_gates(now_s: float, robot: RobotSample | None, launcher: LauncherSa
         if not ok:
             failed.append(name)
     return GateResult(
-        ready, robot_fresh, launcher_fresh, yaw_ready, stopped, rpm_ready, pitch_ready,
-        position_ready, yaw_error, upper_error, lower_error, pitch_error, position_error,
+        ready, robot_fresh, launcher_fresh, yaw_ready, stopped, rpm_ready,
+        position_ready, yaw_error, upper_error, lower_error, position_error,
         "OK" if ready else ",".join(failed),
     )
