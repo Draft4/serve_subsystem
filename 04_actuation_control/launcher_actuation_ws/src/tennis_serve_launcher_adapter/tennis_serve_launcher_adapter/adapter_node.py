@@ -308,13 +308,7 @@ class ServeLauncherAdapterNode(Node):
             self.feeder_state is not None
             and now - self.feeder_received_s <= self.state_timeout_s)
 
-        wheel_valid = bool(
-            wheel_fresh and self.wheel_state.feedback_valid
-            and self.wheel_state.left_fault_valid
-            and self.wheel_state.right_fault_valid
-            and self.wheel_state.left_fault == 0
-            and self.wheel_state.right_fault == 0
-            and not self.wheel_state.error)
+        wheel_valid = bool(wheel_fresh and self.wheel_state.feedback_valid)
         direction_valid = True
         if (wheel_valid and self.enforce_feedback_direction
                 and self._setpoint_active()):
