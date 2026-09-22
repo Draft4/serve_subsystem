@@ -373,6 +373,7 @@ class ServeControllerNode(Node):
                 return result
             while True:
                 now = time.monotonic()
+                self._refresh_launcher_setpoint()
                 gate = evaluate_gates(
                     now, self.robot, self.launcher, shot.target_yaw_rad,
                     shot.upper_target_rpm, shot.lower_target_rpm,
@@ -438,7 +439,10 @@ class ServeControllerNode(Node):
             feed_published = True
             goal_handle.publish_feedback(self._feedback("FEED_TRIGGERED", gate))
             goal_handle.publish_feedback(self._feedback("FEED_DWELL", gate))
-            time.sleep(self.feed_dwell_s)
+            dwell_deadline = time.monotonic() + self.feed_dwell_s
+            while time.monotonic() < dwell_deadline:
+                self._refresh_launcher_setpoint()
+                time.sleep(0.1)
             result.success = True; result.feed_triggered = True; result.feed_confirmed = False
             result.code = "SHOT_TRIGGERED_UNCONFIRMED"
             result.message = "feed dwell elapsed without hardware confirmation"
