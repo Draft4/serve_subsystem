@@ -2,7 +2,7 @@
 
 层级：`01_mission_decision`。版本：`0.7.0`。负责人：**待确认**（提交前按实际负责人填写）。
 
-将 HTTP 请求和状态转换为 ROS 接口；不直接下发硬件命令。
+将 UDP 请求和状态转换为 ROS 接口；不直接下发硬件命令。
 
 包与文档：[工作空间 wiki](wiki/README.md) · [包清单](wiki/packages.md) · [版本记录](wiki/CHANGELOG.md)。
 

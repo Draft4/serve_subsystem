@@ -1,15 +1,11 @@
-# ======================== Windows HTTP/JSON 桥接节点 ========================
+# ======================== Windows UDP/JSON 桥接节点 ========================
 serve_bridge_node:
   ros__parameters:
-    # HTTP 监听地址。0.0.0.0 表示监听 RK3588 的所有网络接口。
+    # UDP 监听地址。0.0.0.0 表示监听 RK3588 的所有网络接口。
     host: 0.0.0.0
 
-    # Windows 上位机连接的 HTTP 端口。
+    # Windows 上位机连接的 UDP 端口。
     port: 8765
-
-    # Bearer Token。环境变量 TENNIS_API_TOKEN 的优先级高于此参数；生产环境建议
-    # 保持这里为空，通过环境变量提供，避免把密钥写入源码。
-    api_token: ""
 
     # Bridge 订阅的实时定位，用于向 Windows 返回机器位置和定位就绪状态。
     robot_state_topic: /localization/robot_state
@@ -20,7 +16,7 @@ serve_bridge_node:
     # 飞轮底层反馈，包含 F407 实际 ARM/DISARM 状态，用于状态接口显示。
     launcher_wheel_state_topic: /launcher/wheels/state
 
-    # Bridge 订阅的训练任务状态，用于生成 /api/v1/status 的任务与门禁信息。
+    # Bridge 订阅的训练任务状态，用于生成 UDP 状态响应。
     serve_status_topic: /tennis/serve_status
 
     # 软件急停为锁存信号；一旦收到 true，状态接口不再报告允许执行。
@@ -34,4 +30,3 @@ serve_bridge_node:
 
     # Job Manager 状态超过该年龄后，Bridge 将其视为不可用。
     serve_status_timeout_s: 1.0
-

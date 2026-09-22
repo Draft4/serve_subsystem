@@ -2,9 +2,9 @@
 
 | 包及文档 | 所属层级 | 工作空间 | 负责人 | 职责 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| [`tennis_serve_operator`](../src/tennis_serve_operator/wiki/README.md) | `01_mission_decision` | `operator_ws` | 待确认 | 上位机 HTTP/JSON 与 ROS 任务接口转换。 | 已实现；现场联调未验证 |
+| [`tennis_serve_operator`](../src/tennis_serve_operator/wiki/README.md) | `01_mission_decision` | `operator_ws` | 待确认 | 上位机 UDP/JSON 与 ROS 任务接口转换。 | 已实现；现场联调未验证 |
 
-层级为 `01_mission_decision`；边界：将 HTTP 请求和状态转换为 ROS 接口；不直接下发硬件命令。
+层级为 `01_mission_decision`；边界：将 UDP 请求和状态转换为 ROS 接口；不直接下发硬件命令。
 源码与构建定义位于各包 `src/<包名>/`。共用接口只在
 `00_shared/interfaces_ws/src/tennis_serve_interfaces/` 定义。发球定位来自
 `/localization/robot_state`，朝向规划只计算当前位置所需 yaw，

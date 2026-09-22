@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import hmac
 import json
 import math
-import os
+import socket
 import threading
 import time
-import uuid
 
 import rclpy
-import uvicorn
-from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -23,7 +19,7 @@ from tennisbot_interfaces.msg import RobotState
 from tennisbot_launcher.msg import LauncherWheelState
 from tennis_serve_interfaces.msg import CourtTarget, LauncherState, ServeSystemStatus, TrainingStep
 from tennis_serve_interfaces.srv import (
-    CreateJob, GetJob, GetModelInfo, JobCommand, JobHeartbeat, PlanShot,
+    CreateJob, GetJob, GetModelInfo, JobCommand, PlanShot,
     ResetEmergencyStop,
 )
 
@@ -43,12 +39,12 @@ class BridgeError(RuntimeError):
 
 
 class ServeBridgeNode(Node):
-    """HTTP boundary only: all planning and execution are delegated to ROS."""
+    """UDP boundary only: all planning and execution are delegated to ROS."""
 
     def __init__(self) -> None:
         super().__init__("serve_bridge_node")
         defaults = {
-            "host": "0.0.0.0", "port": 8765, "api_token": "",
+            "host": "0.0.0.0", "port": 8765,
             "robot_state_topic": "/localization/robot_state",
             "launcher_state_topic": "/tennis/launcher/state",
             "launcher_wheel_state_topic": "/launcher/wheels/state",
@@ -61,10 +57,6 @@ class ServeBridgeNode(Node):
             self.declare_parameter(name, value)
         self.host = str(self.get_parameter("host").value)
         self.port = int(self.get_parameter("port").value)
-        self.api_token = os.environ.get(
-            "TENNIS_API_TOKEN", str(self.get_parameter("api_token").value)).strip()
-        if not self.api_token:
-            raise RuntimeError("set TENNIS_API_TOKEN or serve_bridge_node.api_token")
         self.localization_timeout_s = float(self.get_parameter("localization_timeout_s").value)
         self.launcher_timeout_s = float(self.get_parameter("launcher_state_timeout_s").value)
         self.serve_status_timeout_s = float(
@@ -80,6 +72,7 @@ class ServeBridgeNode(Node):
         self._serve_status = None
         self._serve_status_at = 0.0
         self._emergency_stop = False
+        self._model_cache = None
 
         self._plan = self.create_client(
             PlanShot, "/tennis/serve/plan_shot", callback_group=self._group)
@@ -91,8 +84,6 @@ class ServeBridgeNode(Node):
             GetJob, "/tennis/serve/get_job", callback_group=self._group)
         self._command = self.create_client(
             JobCommand, "/tennis/serve/job_command", callback_group=self._group)
-        self._heartbeat = self.create_client(
-            JobHeartbeat, "/tennis/serve/job_heartbeat", callback_group=self._group)
         self._reset_estop = self.create_client(
             ResetEmergencyStop, "/tennis/serve/reset_emergency_stop",
             callback_group=self._group)
@@ -118,11 +109,11 @@ class ServeBridgeNode(Node):
         self.create_subscription(
             Bool, str(self.get_parameter("emergency_stop_topic").value),
             self._on_estop, estop_qos, callback_group=self._group)
-        self.app = self._build_app()
-        self._server = None
-        self._http_thread = None
+        self._udp_socket = None
+        self._udp_thread = None
+        self._udp_running = False
         self.get_logger().info(
-            f"HTTP coordinate protocol: {COORDINATE_SYSTEM} "
+            f"UDP coordinate protocol: {COORDINATE_SYSTEM} "
             f"(legacy {LEGACY_COORDINATE_SYSTEM} accepted)")
 
     def _on_robot(self, message) -> None:
@@ -172,29 +163,28 @@ class ServeBridgeNode(Node):
         return future.result()
 
     def _model_info(self):
-        return self._call(self._model, GetModelInfo.Request(), 3.0)
+        model = self._call(self._model, GetModelInfo.Request(), 3.0)
+        with self._lock:
+            self._model_cache = model
+        return model
 
     @staticmethod
     def _object(value, field: str) -> dict:
         if not isinstance(value, dict):
-            raise HTTPException(status_code=422, detail=f"{field} must be an object")
+            raise BridgeError(f"{field} must be an object")
         return value
 
     @staticmethod
     def _finite(value, field: str) -> float:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-            raise HTTPException(status_code=422, detail=f"{field} must be a finite number")
+            raise BridgeError(f"{field} must be a finite number")
         return float(value)
 
     @staticmethod
     def _coordinate_system(body: dict) -> str:
         value = body.get("coordinate_system", COORDINATE_SYSTEM)
         if value not in {COORDINATE_SYSTEM, LEGACY_COORDINATE_SYSTEM}:
-            raise HTTPException(
-                status_code=422,
-                detail=("coordinate_system must be court_origin_v2 "
-                        "(court_centered_v1 is accepted only for legacy clients)"),
-            )
+            raise BridgeError("coordinate_system must be court_origin_v2")
         return str(value)
 
     def _target(self, raw: dict, coordinate_system: str) -> CourtTarget:
@@ -214,7 +204,7 @@ class ServeBridgeNode(Node):
             target.net_height_min_m = self._finite(raw["net_height_min_m"], "target.net_height_min_m")
             target.net_height_max_m = self._finite(raw["net_height_max_m"], "target.net_height_max_m")
         except KeyError as exc:
-            raise HTTPException(status_code=422, detail=f"missing target field {exc.args[0]}") from exc
+            raise BridgeError(f"missing target field {exc.args[0]}") from exc
         return target
 
     @staticmethod
@@ -248,19 +238,14 @@ class ServeBridgeNode(Node):
 
     def _status_payload(self) -> dict:
         now = time.monotonic()
-        try:
-            model = self._model_info()
-        except BridgeError as exc:
-            model = None
-            model_message = str(exc)
-        else:
-            model_message = model.message
         with self._lock:
             robot, robot_at = self._robot, self._robot_at
             launcher, launcher_at = self._launcher, self._launcher_at
             backend_armed = self._backend_armed
             serve_status, serve_status_at = self._serve_status, self._serve_status_at
             emergency_stop = self._emergency_stop
+            model = self._model_cache
+        model_message = model.message if model else "request model information first"
         robot_age = now - robot_at if robot_at else None
         launcher_age = now - launcher_at if launcher_at else None
         status_age = now - serve_status_at if serve_status_at else None
@@ -343,74 +328,23 @@ class ServeBridgeNode(Node):
             "job": self._summary(serve_status),
         }
 
-    def _build_app(self) -> FastAPI:
-        app = FastAPI(title="Tennis Serve ROS Bridge", version=SERVICE_VERSION)
-
-        def authorize(authorization: str = Header(default="")) -> None:
-            expected = "Bearer " + self.api_token
-            if not hmac.compare_digest(authorization, expected):
-                raise HTTPException(status_code=401, detail="invalid bearer token")
-
-        @app.get("/api/v1/health")
-        def health():
-            try:
-                model = self._model_info()
-                ready, version, digest, message = (
-                    bool(model.ready), model.model_version, model.model_sha256, model.message)
-            except BridgeError as exc:
-                ready, version, digest, message = False, "", "", str(exc)
-            return {"ok": True, "service": "tennis-serve-ros", "service_version": SERVICE_VERSION,
-                    "mode": "training", "model_ready": ready, "model_version": version,
-                    "model_sha256": digest, "message": message}
-
-        @app.get("/api/v1/status", dependencies=[Depends(authorize)])
-        def status():
-            return self._status_payload()
-
-        @app.get("/api/v1/model", dependencies=[Depends(authorize)])
-        def model_info():
-            try:
-                result = self._model_info()
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            metadata = json.loads(result.metadata_json) if result.metadata_json else {}
-            return {"ok": bool(result.ready), "code": result.code, "message": result.message,
-                    "model_version": result.model_version, "model_sha256": result.model_sha256,
-                    **metadata}
-
-        def preview_impl(body: dict):
-            coordinate_system = self._coordinate_system(body)
-            request_id = str(body.get("request_id", ""))
-            if not request_id:
-                raise HTTPException(status_code=422, detail="request_id is required")
-            request = PlanShot.Request()
-            request.request_id = request_id
-            request.step_id = "preview"
-            request.target = self._target(body.get("target"), coordinate_system)
-            try:
-                result = self._call(self._plan, request, 5.0)
-                model = self._model_info()
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            if not result.ok:
-                return {"request_id": request_id, "ok": False, "decision": "reject",
-                        "code": result.code, "message": result.message,
-                        "coordinate_system": coordinate_system, "pose_source": "localization",
-                        "execution_allowed": False, "model_version": model.model_version,
-                        "model_sha256": model.model_sha256, "plan": None, "prediction": None,
-                        "evidence": {"court_request": body}}
-            shot = result.shot
-            turn = math.degrees(math.atan2(
-                math.sin(shot.target_yaw_rad - shot.robot_yaw_rad),
-                math.cos(shot.target_yaw_rad - shot.robot_yaw_rad)))
-            return {
-                "request_id": request_id, "ok": True, "decision": "execute",
-                "code": result.code, "message": result.message,
-                "coordinate_system": coordinate_system, "pose_source": "localization",
-                "execution_allowed": False, "model_version": shot.model_version,
-                "model_sha256": shot.model_sha256,
+    def _preview(self, body: dict) -> dict:
+        request = PlanShot.Request()
+        request.request_id = "udp-preview"
+        request.step_id = "preview"
+        request.target = self._target(body["target"], self._coordinate_system(body))
+        result = self._call(self._plan, request, 5.0)
+        if not result.ok:
+            return {"ok": False, "decision": "reject", "code": result.code,
+                    "message": result.message, "plan": None, "prediction": None}
+        shot = result.shot
+        return {"ok": True, "decision": "execute", "code": result.code,
+                "message": result.message,
                 "plan": {"target_heading_deg": math.degrees(shot.target_yaw_rad),
-                         "turn_deg": turn, "upper_rpm": int(shot.upper_target_rpm),
+                         "turn_deg": math.degrees(math.atan2(
+                             math.sin(shot.target_yaw_rad - shot.robot_yaw_rad),
+                             math.cos(shot.target_yaw_rad - shot.robot_yaw_rad))),
+                         "upper_rpm": int(shot.upper_target_rpm),
                          "lower_rpm": int(shot.lower_target_rpm),
                          "pitch_deg": shot.pitch_target_deg},
                 "prediction": {"success_probability": shot.success_probability,
@@ -420,149 +354,119 @@ class ServeBridgeNode(Node):
                                "landing_p95_m": shot.landing_p95_m,
                                "net_height_median_m": shot.net_height_median_m,
                                "net_height_p05_m": shot.net_height_p05_m,
-                               "net_height_p95_m": shot.net_height_p95_m},
-                "evidence": {"court_request": body,
-                             "robot_pose": {"x_m": shot.robot_x_m, "y_m": shot.robot_y_m,
-                                            "yaw_rad": shot.robot_yaw_rad}},
-            }
+                               "net_height_p95_m": shot.net_height_p95_m}}
 
-        @app.post("/api/v1/plan-preview", dependencies=[Depends(authorize)])
-        def plan_preview(body: dict = Body(...)):
-            return preview_impl(self._object(body, "body"))
+    def _create_job(self, body: dict) -> dict:
+        request = CreateJob.Request()
+        request.request_id = "udp-job"
+        request.client_id = "udp"
+        request.name = str(body.get("name", ""))
+        request.mode = str(body.get("mode", "fixed"))
+        request.cycles = int(body.get("cycles", 1))
+        request.cycle_rest_s = float(body.get("cycle_rest_s", 0.0))
+        request.countdown_s = float(body.get("countdown_s", 0.0))
+        request.stop_wheels_during_rest = bool(body.get("stop_wheels_during_rest", False))
+        coordinate_system = self._coordinate_system(body)
+        for raw in body.get("steps", []):
+            step = TrainingStep()
+            step.step_id = str(raw.get("step_id", ""))
+            step.target = self._target(raw["target"], coordinate_system)
+            step.repeat = int(raw.get("repeat", 1))
+            step.interval_s = float(raw.get("interval_s", 1.0))
+            request.steps.append(step)
+        result = self._call(self._create, request, 15.0)
+        return self._job_detail(result.job_json) if result.job_json else {
+            "ok": bool(result.accepted), "code": result.code, "message": result.message}
 
-        @app.post("/api/v1/recommend", dependencies=[Depends(authorize)])
-        def recommend(body: dict = Body(...)):
-            return preview_impl(self._object(body, "body"))
+    def _get_job(self, job_id: str) -> dict:
+        request = GetJob.Request()
+        request.job_id = job_id
+        result = self._call(self._get, request, 3.0)
+        return self._job_detail(result.job_json) if result.job_json else {
+            "ok": bool(result.found), "code": result.code, "message": result.message}
 
-        @app.post("/api/v1/jobs", dependencies=[Depends(authorize)])
-        def create_job(body: dict = Body(...)):
-            body = self._object(body, "body")
-            coordinate_system = self._coordinate_system(body)
-            request = CreateJob.Request()
-            request.request_id = str(body.get("request_id", ""))
-            request.client_id = str(body.get("client_id", ""))
-            request.name = str(body.get("name", ""))
-            request.mode = str(body.get("mode", ""))
+    def _job_command(self, job_id: str, body: dict) -> dict:
+        request = JobCommand.Request()
+        request.job_id = job_id
+        request.command_id = "udp-command"
+        request.client_id = "udp"
+        request.action = str(body.get("action", ""))
+        result = self._call(self._command, request, 5.0)
+        detail = self._job_detail(result.job_json) if result.job_json else {}
+        return {"accepted": bool(result.accepted), "code": result.code,
+                "message": result.message, "job": detail.get("summary")}
+
+    def _reset(self) -> dict:
+        request = ResetEmergencyStop.Request()
+        request.command_id = "udp-reset"
+        result = self._call(self._reset_estop, request, 3.0)
+        if result.accepted:
+            with self._lock:
+                self._emergency_stop = False
+        return {"ok": bool(result.accepted), "code": result.code, "message": result.message}
+
+    def _handle_udp(self, request: dict) -> dict:
+        op = request.get("op")
+        data = request.get("data", {})
+        if op == "status":
+            return self._status_payload()
+        if op == "model":
+            model = self._model_info()
+            return {"ok": bool(model.ready), "code": model.code, "message": model.message,
+                    "model_version": model.model_version}
+        if op == "preview":
+            return self._preview(data)
+        if op == "create_job":
+            return self._create_job(data)
+        if op == "get_job":
+            return self._get_job(str(request.get("job_id", "")))
+        if op == "job_command":
+            return self._job_command(str(request.get("job_id", "")), data)
+        if op == "reset_estop":
+            return self._reset()
+        return {"ok": False, "message": "unknown operation"}
+
+    def _udp_loop(self) -> None:
+        while self._udp_running:
             try:
-                request.cycles = int(body.get("cycles", 0))
-                request.cycle_rest_s = self._finite(body.get("cycle_rest_s"), "cycle_rest_s")
-                request.countdown_s = self._finite(body.get("countdown_s"), "countdown_s")
-            except (TypeError, ValueError, OverflowError) as exc:
-                raise HTTPException(status_code=422, detail="invalid training numeric field") from exc
-            request.stop_wheels_during_rest = bool(body.get("stop_wheels_during_rest", False))
-            raw_steps = body.get("steps")
-            if not isinstance(raw_steps, list):
-                raise HTTPException(status_code=422, detail="steps must be an array")
-            for raw_step in raw_steps:
-                raw_step = self._object(raw_step, "step")
-                step = TrainingStep()
-                step.step_id = str(raw_step.get("step_id", ""))
-                step.target = self._target(raw_step.get("target"), coordinate_system)
-                try:
-                    step.repeat = int(raw_step.get("repeat", 0))
-                    step.interval_s = self._finite(raw_step.get("interval_s"), "step.interval_s")
-                except (TypeError, ValueError, OverflowError) as exc:
-                    raise HTTPException(status_code=422, detail="invalid step numeric field") from exc
-                request.steps.append(step)
+                raw, address = self._udp_socket.recvfrom(65535)
+            except OSError:
+                break
             try:
-                result = self._call(self._create, request, 15.0)
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            detail = self._job_detail(result.job_json) if result.job_json else {}
-            if not result.accepted:
-                raise HTTPException(status_code=409 if result.code == "ACTIVE_JOB_EXISTS" else 422,
-                                    detail={"code": result.code, "message": result.message,
-                                            "job": detail})
-            return detail
-
-        @app.get("/api/v1/jobs/{job_id}", dependencies=[Depends(authorize)])
-        def get_job(job_id: str):
-            request = GetJob.Request(); request.job_id = job_id
+                response = self._handle_udp(json.loads(raw.decode("utf-8")))
+            except Exception as exc:
+                response = {"ok": False, "message": str(exc)}
             try:
-                result = self._call(self._get, request, 3.0)
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            if not result.found:
-                raise HTTPException(status_code=404, detail=result.message)
-            return self._job_detail(result.job_json)
+                self._udp_socket.sendto(json.dumps(response, ensure_ascii=False,
+                                                    separators=(",", ":")).encode("utf-8"), address)
+            except OSError:
+                break
 
-        @app.post("/api/v1/jobs/{job_id}/command", dependencies=[Depends(authorize)])
-        def job_command(job_id: str, body: dict = Body(...)):
-            body = self._object(body, "body")
-            request = JobCommand.Request(); request.job_id = job_id
-            request.command_id = str(body.get("command_id", ""))
-            request.client_id = str(body.get("client_id", ""))
-            request.action = str(body.get("action", ""))
-            try:
-                result = self._call(self._command, request, 5.0)
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            detail = self._job_detail(result.job_json) if result.job_json else {}
-            if not result.accepted:
-                status_code = 404 if result.code == "JOB_NOT_FOUND" else (
-                    403 if result.code == "NOT_OWNER" else 409)
-                raise HTTPException(status_code=status_code,
-                                    detail={"code": result.code, "message": result.message})
-            return {"command_id": request.command_id, "accepted": result.accepted,
-                    "code": result.code, "message": result.message,
-                    "job": detail.get("summary")}
+    def start_udp(self) -> None:
+        self._udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._udp_socket.bind((self.host, self.port))
+        self._udp_running = True
+        self._udp_thread = threading.Thread(target=self._udp_loop, name="serve-udp", daemon=True)
+        self._udp_thread.start()
 
-        @app.post("/api/v1/jobs/{job_id}/heartbeat", dependencies=[Depends(authorize)])
-        def job_heartbeat(job_id: str, body: dict = Body(...)):
-            body = self._object(body, "body")
-            request = JobHeartbeat.Request(); request.job_id = job_id
-            request.client_id = str(body.get("client_id", ""))
-            try:
-                result = self._call(self._heartbeat, request, 3.0)
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            return {"ok": result.accepted, "code": result.code, "message": result.message}
-
-        @app.post("/api/v1/emergency-stop/reset", dependencies=[Depends(authorize)])
-        def reset_emergency_stop(body: dict = Body(default={})):
-            body = self._object(body, "body")
-            request = ResetEmergencyStop.Request()
-            request.command_id = str(
-                body.get("command_id") or "estop-reset-" + uuid.uuid4().hex)
-            try:
-                result = self._call(self._reset_estop, request, 3.0)
-            except BridgeError as exc:
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-            if result.accepted:
-                with self._lock:
-                    self._emergency_stop = False
-            else:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": result.code, "message": result.message})
-            return {"ok": True, "code": result.code, "message": result.message}
-
-        return app
-
-    def start_http(self) -> None:
-        config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="info")
-        self._server = uvicorn.Server(config)
-        self._http_thread = threading.Thread(
-            target=self._server.run, name="serve-http", daemon=True)
-        self._http_thread.start()
-
-    def stop_http(self) -> None:
-        if self._server:
-            self._server.should_exit = True
-        if self._http_thread:
-            self._http_thread.join(timeout=3.0)
+    def stop_udp(self) -> None:
+        self._udp_running = False
+        if self._udp_socket:
+            self._udp_socket.close()
+        if self._udp_thread:
+            self._udp_thread.join(timeout=1.0)
 
 
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = ServeBridgeNode()
-    node.start_http()
-    executor = MultiThreadedExecutor(num_threads=8)
+    node.start_udp()
+    executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
     try:
         executor.spin()
     finally:
-        node.stop_http()
+        node.stop_udp()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

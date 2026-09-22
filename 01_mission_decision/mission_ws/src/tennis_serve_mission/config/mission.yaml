@@ -1,12 +1,6 @@
 # ======================== 训练任务管理节点 ========================
 serve_job_manager_node:
   ros__parameters:
-    # Windows 上位机心跳超时。RUNNING 状态超过该时间没有心跳会自动暂停并停轮。
-    heartbeat_timeout_s: 10.0
-
-    # 仅对尚未发布拨球命令的失败进行重新规划和重试。
-    max_pre_feed_retries: 2
-
     # 训练任务规模和时间范围。均为调度资源参数，可按实际训练需求继续放宽。
     max_job_steps: 500
     max_job_cycles: 999

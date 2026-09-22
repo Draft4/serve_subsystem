@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import threading
@@ -19,7 +18,7 @@ from tennisbot_interfaces.msg import RobotState
 from tennis_serve_interfaces.action import ExecuteShot
 from tennis_serve_interfaces.msg import LauncherState, ServeSystemStatus
 from tennis_serve_interfaces.srv import (
-    CreateJob, GetJob, GetModelInfo, JobCommand, JobHeartbeat, PlanShot, SetLauncherHold,
+    CreateJob, GetJob, GetModelInfo, JobCommand, PlanShot, SetLauncherHold,
 )
 
 from tennis_serve_common.core import (
@@ -40,9 +39,6 @@ RETRYABLE_PRE_FEED_CODES = {
 def _canonical(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-
-def _digest(value) -> str:
-    return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
 def _target_dict(target) -> dict:
@@ -89,8 +85,6 @@ class ServeJobManagerNode(Node):
 
     def __init__(self) -> None:
         super().__init__("serve_job_manager_node")
-        self.declare_parameter("heartbeat_timeout_s", 10.0)
-        self.declare_parameter("max_pre_feed_retries", 2)
         self.declare_parameter("max_job_steps", 500)
         self.declare_parameter("max_job_cycles", 999)
         self.declare_parameter("max_step_repeat", 1000)
@@ -108,9 +102,6 @@ class ServeJobManagerNode(Node):
         self.declare_parameter("linear_speed_limit_mps", 0.20)
         self.declare_parameter("angular_speed_limit_radps", 0.10)
         self.declare_parameter("rpm_tolerance_ratio", 0.15)
-        self.heartbeat_timeout_s = float(self.get_parameter("heartbeat_timeout_s").value)
-        self.max_pre_feed_retries = int(
-            self.get_parameter("max_pre_feed_retries").value)
         self.max_job_steps = int(self.get_parameter("max_job_steps").value)
         self.max_job_cycles = int(self.get_parameter("max_job_cycles").value)
         self.max_step_repeat = int(self.get_parameter("max_step_repeat").value)
@@ -136,8 +127,6 @@ class ServeJobManagerNode(Node):
         self._lock = threading.RLock()
         self._job = None
         self._events = deque(maxlen=200)
-        self._request_cache = {}
-        self._command_cache = {}
         self._worker = None
         self._active_goal_handle = None
         self._robot = None
@@ -162,8 +151,6 @@ class ServeJobManagerNode(Node):
                             callback_group=self._group)
         self.create_service(JobCommand, "/tennis/serve/job_command", self._job_command,
                             callback_group=self._group)
-        self.create_service(JobHeartbeat, "/tennis/serve/job_heartbeat", self._heartbeat,
-                            callback_group=self._group)
         self._status_pub = self.create_publisher(
             ServeSystemStatus, str(self.get_parameter("status_topic").value), 10)
         self.create_subscription(
@@ -173,7 +160,6 @@ class ServeJobManagerNode(Node):
             LauncherState, str(self.get_parameter("launcher_state_topic").value),
             self._on_launcher, qos_profile_sensor_data, callback_group=self._group)
         self.create_timer(0.1, self._publish_status, callback_group=self._group)
-        self.create_timer(0.25, self._check_heartbeat, callback_group=self._group)
         self.create_timer(0.25, self._maintain_launcher_hold, callback_group=self._group)
 
     def _on_robot(self, message) -> None:
@@ -212,8 +198,7 @@ class ServeJobManagerNode(Node):
             deadline = self._job.get("next_deadline_monotonic", 0.0)
             value = deepcopy({
                 key: item for key, item in self._job.items()
-                if key not in {"schedule", "planned_messages", "last_heartbeat_monotonic",
-                               "next_deadline_monotonic"}
+                if key not in {"schedule", "planned_messages", "next_deadline_monotonic"}
             })
             value["summary"] = {
                 "job_id": value["job_id"], "name": value["name"],
@@ -318,8 +303,6 @@ class ServeJobManagerNode(Node):
                     f"{code}: {message}; launcher will stop when its hold lease expires")
 
     def _validate_request(self, request) -> None:
-        if not request.request_id or not request.client_id:
-            raise ValueError("request_id and client_id are required")
         if request.mode not in {"fixed", "sequence"}:
             raise ValueError("mode must be fixed or sequence")
         if not 1 <= len(request.steps) <= self.max_job_steps:
@@ -350,24 +333,7 @@ class ServeJobManagerNode(Node):
                 f"total shot count exceeds {self.max_total_shots}")
 
     def _create_job(self, request, response):
-        payload = {
-            "client_id": request.client_id, "name": request.name, "mode": request.mode,
-            "cycles": request.cycles, "cycle_rest_s": request.cycle_rest_s,
-            "countdown_s": request.countdown_s,
-            "stop_wheels_during_rest": request.stop_wheels_during_rest,
-            "steps": [{"step_id": s.step_id, "target": _target_dict(s.target),
-                       "repeat": s.repeat, "interval_s": s.interval_s} for s in request.steps],
-        }
-        fingerprint = _digest(payload)
         with self._lock:
-            cached = self._request_cache.get(request.request_id)
-            if cached:
-                if cached[0] != fingerprint:
-                    response.code = "IDEMPOTENCY_CONFLICT"
-                    response.message = "request_id was already used with different content"
-                    return response
-                response.accepted, response.code, response.message, response.job_id, response.job_json = cached[1]
-                return response
             if self._job and self._job["state"] in ACTIVE_STATES:
                 response.code = "ACTIVE_JOB_EXISTS"
                 response.message = "finish or cancel the current job first"
@@ -383,8 +349,7 @@ class ServeJobManagerNode(Node):
         with self._lock:
             self._events.clear()
             self._job = {
-                "request_id": request.request_id, "job_id": job_id,
-                "client_id": request.client_id, "name": request.name or "未命名训练",
+                "job_id": job_id, "name": request.name or "未命名训练",
                 "mode": request.mode, "state": "VALIDATING", "phase": "VALIDATING",
                 "code": "VALIDATING", "message": "compiling all shots from live localization",
                 "runtime_mode": "hardware", "hardware_output": True,
@@ -393,8 +358,7 @@ class ServeJobManagerNode(Node):
                 "total_balls": sum(s.repeat for s in request.steps) * request.cycles,
                 "feed_confirmed": False, "feed_triggered": False,
                 "model_version": "", "model_sha256": "", "compiled_steps": [],
-                "program": payload, "schedule": [], "planned_messages": [],
-                "last_heartbeat_monotonic": time.monotonic(), "next_deadline_monotonic": 0.0,
+                "program": {"countdown_s": request.countdown_s}, "schedule": [], "planned_messages": [], "next_deadline_monotonic": 0.0,
                 "estimated_min_duration_s": float(request.countdown_s),
             }
         self._event("info", "VALIDATING", "开始按实时定位编译训练任务")
@@ -408,15 +372,13 @@ class ServeJobManagerNode(Node):
                 if not self._plan_client.wait_for_service(timeout_sec=2.0):
                     raise RuntimeError("planner service is unavailable")
                 plan_request = PlanShot.Request()
-                plan_request.request_id = f"{request.request_id}:{index}"
+                plan_request.request_id = f"{job_id}:{index}"
                 plan_request.step_id = step.step_id or f"step-{index + 1}"
                 plan_request.target = step.target
                 result = self._wait_future(self._plan_client.call_async(plan_request), 5.0)
                 if not result.ok:
                     raise RuntimeError(f"{result.code}: {result.message}")
                 shot = result.shot
-                if model_sha is not None and shot.model_sha256 != model_sha:
-                    raise RuntimeError("model changed while compiling the job")
                 model_sha, model_version = shot.model_sha256, shot.model_version
                 plans_by_step.append(_shot_dict(shot))
                 planned_messages.append(shot)
@@ -466,11 +428,6 @@ class ServeJobManagerNode(Node):
             response.message = str(exc)
             response.job_id = job_id
             response.job_json = self._job_json()
-        cache_value = (response.accepted, response.code, response.message,
-                       response.job_id, response.job_json)
-        if response.accepted:
-            with self._lock:
-                self._request_cache[request.request_id] = (fingerprint, cache_value)
         return response
 
     def _get_job(self, request, response):
@@ -483,30 +440,12 @@ class ServeJobManagerNode(Node):
         return response
 
     def _job_command(self, request, response):
-        fingerprint = _digest({"job_id": request.job_id, "client_id": request.client_id,
-                               "action": request.action})
         with self._lock:
-            cached = self._command_cache.get(request.command_id)
-            if cached:
-                if cached[0] != fingerprint:
-                    response.code = "IDEMPOTENCY_CONFLICT"
-                    response.message = "command_id was already used with different content"
-                    return response
-                response.accepted, response.code, response.message, response.job_json = cached[1]
-                return response
-            job = self._job
-            if not job or job["job_id"] != request.job_id:
+            if not self._job or self._job["job_id"] != request.job_id:
                 response.code = "JOB_NOT_FOUND"; response.message = "job not found"
                 return response
-            if request.action != "cancel" and request.client_id != job["client_id"]:
-                response.code = "NOT_OWNER"; response.message = "only the owner may control this job"
-                return response
-
-            accepted, code, message = self._apply_command_locked(request.action)
-            response.accepted, response.code, response.message = accepted, code, message
+            response.accepted, response.code, response.message = self._apply_command_locked(request.action)
             response.job_json = self._job_json()
-            self._command_cache[request.command_id] = (
-                fingerprint, (accepted, code, message, response.job_json))
         return response
 
     def _apply_command_locked(self, action: str):
@@ -519,8 +458,7 @@ class ServeJobManagerNode(Node):
             if not ok:
                 return False, code, message
             self._job.update({"state": "RUNNING", "phase": "COUNTDOWN",
-                              "code": "RUNNING", "message": "training started",
-                              "last_heartbeat_monotonic": time.monotonic()})
+                              "code": "RUNNING", "message": "training started"})
             self._event("info", "RUNNING", "训练开始")
             self._start_worker_locked()
             return True, "RUNNING", "training started"
@@ -535,8 +473,7 @@ class ServeJobManagerNode(Node):
             if not ok:
                 return False, code, message
             self._job.update({"state": "RUNNING", "phase": "RESUMING",
-                              "code": "RUNNING", "message": "training resumed",
-                              "last_heartbeat_monotonic": time.monotonic()})
+                              "code": "RUNNING", "message": "training resumed"})
             self._event("info", "RESUMED", "训练继续")
             self._start_worker_locked()
             return True, "RUNNING", "training resumed"
@@ -574,29 +511,7 @@ class ServeJobManagerNode(Node):
             return False, "MODEL_NOT_READY", str(exc)
         if not model.ready:
             return False, "MODEL_NOT_READY", model.message
-        if model.model_sha256 != self._job["model_sha256"]:
-            return False, "MODEL_CHANGED", "model SHA changed after job compilation"
         return True, "OK", "preflight passed"
-
-    def _heartbeat(self, request, response):
-        with self._lock:
-            job = self._job
-            if not job or job["job_id"] != request.job_id:
-                response.code = "JOB_NOT_FOUND"; response.message = "job not found"
-            elif request.client_id != job["client_id"]:
-                response.code = "NOT_OWNER"; response.message = "heartbeat client is not the owner"
-            else:
-                job["last_heartbeat_monotonic"] = time.monotonic()
-                response.accepted = True; response.code = "OK"; response.message = "heartbeat accepted"
-            response.job_json = self._job_json() if job else "{}"
-        return response
-
-    def _check_heartbeat(self) -> None:
-        with self._lock:
-            if not self._job or self._job["state"] != "RUNNING":
-                return
-            if time.monotonic() - self._job["last_heartbeat_monotonic"] > self.heartbeat_timeout_s:
-                self._pause_locked("HEARTBEAT_TIMEOUT", "Windows 心跳超时，已请求安全暂停")
 
     def _pause_locked(self, code: str, message: str) -> None:
         self._job.update({"state": "PAUSED", "phase": "PAUSING",
@@ -657,12 +572,6 @@ class ServeJobManagerNode(Node):
         if not plan_result.ok:
             failed.code = plan_result.code or "PLAN_REJECTED"
             failed.message = plan_result.message
-            return failed
-        with self._lock:
-            expected_model_sha = self._job["model_sha256"] if self._job else ""
-        if plan_result.shot.model_sha256 != expected_model_sha:
-            failed.code = "MODEL_CHANGED"
-            failed.message = "model SHA changed while the job was running"
             return failed
         goal.shot = plan_result.shot
         with self._lock:
@@ -740,21 +649,7 @@ class ServeJobManagerNode(Node):
                         self._stop_launcher_locked("JOB_COMPLETED")
                         return
                     current_entry = self._job["schedule"][index]
-                retry = 0
-                while True:
-                    result = self._send_shot(index)
-                    if (result.success or result.feed_triggered
-                            or result.code not in RETRYABLE_PRE_FEED_CODES
-                            or retry >= self.max_pre_feed_retries):
-                        break
-                    retry += 1
-                    self._event(
-                        "warning", "SHOT_RETRY",
-                        f"第 {index + 1} 球拨球前失败，重新规划后重试 "
-                        f"({retry}/{self.max_pre_feed_retries}): "
-                        f"{result.code}: {result.message}")
-                    if not self._wait_while_running(0.25, "REPLANNING"):
-                        return
+                result = self._send_shot(index)
                 with self._lock:
                     if self._job["state"] in {"PAUSED", "CANCELLED"} and not result.feed_triggered:
                         if self._job["state"] == "PAUSED":
