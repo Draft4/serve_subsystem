@@ -9,7 +9,7 @@ import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from std_msgs.msg import Bool
@@ -373,7 +373,6 @@ class ServeControllerNode(Node):
                 return result
             while True:
                 now = time.monotonic()
-                self._refresh_launcher_setpoint()
                 gate = evaluate_gates(
                     now, self.robot, self.launcher, shot.target_yaw_rad,
                     shot.upper_target_rpm, shot.lower_target_rpm,
@@ -439,10 +438,7 @@ class ServeControllerNode(Node):
             feed_published = True
             goal_handle.publish_feedback(self._feedback("FEED_TRIGGERED", gate))
             goal_handle.publish_feedback(self._feedback("FEED_DWELL", gate))
-            dwell_deadline = time.monotonic() + self.feed_dwell_s
-            while time.monotonic() < dwell_deadline:
-                self._refresh_launcher_setpoint()
-                time.sleep(0.1)
+            time.sleep(self.feed_dwell_s)
             result.success = True; result.feed_triggered = True; result.feed_confirmed = False
             result.code = "SHOT_TRIGGERED_UNCONFIRMED"
             result.message = "feed dwell elapsed without hardware confirmation"
@@ -464,7 +460,7 @@ class ServeControllerNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = ServeControllerNode()
-    executor = SingleThreadedExecutor()
+    executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     try:
         executor.spin()
